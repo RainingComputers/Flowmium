@@ -1,5 +1,5 @@
 ![](logo.svg)
 
-# Mycelium
+# Flowmium
 
-Mycelium is a job orchestrator for k8s written in rust
+Flowmium is a workflow orchestrator that uses kubernetes written in rust.
