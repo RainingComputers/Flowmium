@@ -12,42 +12,46 @@ These designs are still in early stages, detailed documentation is yet to be don
 
 -   `POST /api/v1/job` and `PUT /api/v1/job`
     _DAG container job definition_
-    ```yaml
-    name: ""
-    schedule: ""
-    tasks:
-    	- name: ""
-    		image: ""
-    		depends: ["", ""]
-    		cmd: [],
-    		env:
-    			- name: ""
-    			  value: ""
-    			- name: ""
-    			  fromInput: ""
-    			- name: ""
-    			  fromSecret: ""
-    		inputs:
-    			- from: ""
-    			  path: ""
-    		outputs:
-    			- name: ""
-    			  path: ""
-    		config:
-    			active_deadline_seconds: 34
-    			affinity: 34
-    			tolerations: 34
-    			image_pull_secrets: 34
-    			priority: 3
-    			limits: 23
-    			requests: 23
-    ```
-    _Python framework job definition_
-    ```yaml
-    python:
-    	image: ""
-    	registry: ""
-    ```
+
+```yaml
+name: ""
+schedule: ""
+tasks:
+  - name: ""
+    image: ""
+    depends: ["", ""]
+    cmd: [],
+    env:
+	  - name: ""
+	    value: ""
+	  - name: ""
+	    fromInput: ""
+	  - name: ""
+	    fromSecret: ""
+inputs:
+  - from: ""
+    path: ""
+outputs:
+  - name: ""
+    path: ""
+config:
+	active_deadline_seconds: 34
+	affinity: 34
+	tolerations: 34
+	image_pull_secrets: 34
+	priority: 3
+	limits: 23
+	requests: 23
+```
+
+_Python framework job definition_
+
+```yaml
+python:
+    image: ""
+    registry: ""
+```
+
 -   `GET /api/v1/job/` and `GET /api/v1/job/{name}`
 -   `DELETE /api/v1/job/{name}`
 -   `POST /api/v1/registry` and `PUT /api/v1/registry`
