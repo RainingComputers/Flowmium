@@ -22,12 +22,12 @@ tasks:
     depends: ["", ""]
     cmd: [],
     env:
-	  - name: ""
-	    value: ""
-	  - name: ""
-	    fromInput: ""
-	  - name: ""
-	    fromSecret: ""
+      - name: ""
+        value: ""
+      - name: ""
+        fromInput: ""
+      - name: ""
+        fromSecret: ""
 inputs:
   - from: ""
     path: ""
@@ -35,13 +35,13 @@ outputs:
   - name: ""
     path: ""
 config:
-	active_deadline_seconds: 34
-	affinity: 34
-	tolerations: 34
-	image_pull_secrets: 34
-	priority: 3
-	limits: 23
-	requests: 23
+  active_deadline_seconds: 34
+  affinity: 34
+  tolerations: 34
+  image_pull_secrets: 34
+  priority: 3
+  limits: 23
+  requests: 23
 ```
 
 _Python framework job definition_
