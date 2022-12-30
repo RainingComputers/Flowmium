@@ -3,13 +3,13 @@ mod job;
 use job::{EnvVar, Input, InputRef, Job, KeyValuePair, Output, SecretRef};
 use std::{process::ExitCode, vec};
 
-use crate::job::{ContainerDAGJob, Step};
+use crate::job::{ContainerDAGJob, Task};
 
 fn main() -> ExitCode {
     let deserialized = r#"
     name: "hello-world"
     schedule: ""
-    steps:
+    tasks:
       - name: "hello-world-zero"
         image: "foo/bar"
         depends: ["foo", "bar"]
@@ -40,7 +40,7 @@ fn main() -> ExitCode {
     let job_expected = Job::ContainerDAGJob(ContainerDAGJob {
         name: "hello-world".to_owned(),
         schedule: Some("".to_owned()),
-        steps: vec![Step {
+        tasks: vec![Task {
             name: "hello-world-zero".to_owned(),
             image: "foo/bar".to_owned(),
             depends: vec!["foo".to_owned(), "bar".to_owned()],

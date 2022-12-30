@@ -41,7 +41,7 @@ pub struct Output {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Step {
+pub struct Task {
     pub name: String,
     pub image: String,
     pub depends: Vec<String>,
@@ -56,7 +56,7 @@ pub struct Step {
 pub struct ContainerDAGJob {
     pub name: String,
     pub schedule: Option<String>,
-    pub steps: Vec<Step>,
+    pub tasks: Vec<Task>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
