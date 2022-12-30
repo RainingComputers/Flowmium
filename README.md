@@ -69,21 +69,21 @@ from flowmium import flow
 
 @flow.task()
 def foo1(context):
-	return 1
+    return 1
 
 @flow.task({'arg_1': foo1})
 def foo2(context, arg_1)
     print(context.secrets)
-	return arg_1 + 1
+    return arg_1 + 1
 
 @flow.task({'arg_1': foo1}, workers=8)
 def foo3(context, arg_1)
     print(context.worker_id)    # used for manual sharding
-	return arg_1 + 2
+    return arg_1 + 2
 
 @flow.task(depends={'arg_1': foo2, 'arg_2': foo3}, secrets=[""], config={})
 def foo3(context, arg_1, arg_2)
-	return arg_1 * arg_2
+    return arg_1 * arg_2
 
 flow.run(name="", schedule="", secrets=[""], config={})
 # prints yaml DAG container job definition to run each function (task) as a pod
