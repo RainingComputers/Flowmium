@@ -73,10 +73,12 @@ def foo1(context):
 
 @flow.task({'arg_1': foo1})
 def foo2(context, arg_1)
+    print(context.secrets)
 	return arg_1 + 1
 
-@flow.task({'arg_1': foo1})
+@flow.task({'arg_1': foo1}, workers=8)
 def foo3(context, arg_1)
+    print(context.worker_id)    # used for manual sharding
 	return arg_1 + 2
 
 @flow.task(depends={'arg_1': foo2, 'arg_2': foo3}, secrets=[""], config={})
