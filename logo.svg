@@ -26,15 +26,15 @@
      showgrid="true"
      units="px"
      scale-x="1"
-     inkscape:zoom="4.3357537"
-     inkscape:cx="93.294045"
-     inkscape:cy="69.076802"
+     inkscape:zoom="3.8457454"
+     inkscape:cx="31.0733"
+     inkscape:cy="69.037332"
      inkscape:window-width="1920"
      inkscape:window-height="1027"
      inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="0"
-     inkscape:current-layer="g952"
+     inkscape:current-layer="g923"
      showguides="false">
     <inkscape:grid
        type="xygrid"
@@ -65,7 +65,8 @@
        fy="82.837334"
        r="10.177137"
        gradientTransform="matrix(1.0574586,0,0,0.90166182,-4.8040148,8.0416176)"
-       gradientUnits="userSpaceOnUse" />
+       gradientUnits="userSpaceOnUse"
+       spreadMethod="pad" />
   </defs>
   <g
      inkscape:label="Layer 1"
@@ -96,7 +97,7 @@
              d="m 64.582893,76.130618 8.953148,4.387797 8.95315,-4.387797 -8.95315,-4.387798 z"
              sodipodi:nodetypes="ccccc" />
           <path
-             style="fill:#000000;fill-opacity:0;stroke:url(#radialGradient12988);stroke-width:1.19127;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+             style="fill:#000000;fill-opacity:0;stroke:url(#radialGradient12988);stroke-width:1.51582326;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
              d="m 63.463747,77.776041 1.119145,-1.645424 8.953148,4.387798 8.95315,-4.387798 1.119143,1.645424 -8.95315,4.387799 v 2.184111 8.785382 H 72.416897 V 82.16384 l -8.95315,-4.387799"
              id="path12001"
              sodipodi:nodetypes="ccccccccccc" />
