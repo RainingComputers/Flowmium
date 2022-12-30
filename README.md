@@ -11,7 +11,8 @@ These designs are still in early stages, detailed documentation is yet to be don
 ### Endpoints and job models
 
 -   `POST /api/v1/job` and `PUT /api/v1/job`
-    _DAG container job definition_
+
+_DAG container job definition_
 
 ```yaml
 name: ""
@@ -28,12 +29,12 @@ tasks:
         fromInput: ""
       - name: ""
         fromSecret: ""
-inputs:
-  - from: ""
-    path: ""
-outputs:
-  - name: ""
-    path: ""
+    inputs:
+      - from: ""
+        path: ""
+    outputs:
+      - name: ""
+        path: ""
 config:
   active_deadline_seconds: 34
   affinity: 34
