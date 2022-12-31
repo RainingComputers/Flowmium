@@ -26,9 +26,9 @@
      showgrid="true"
      units="px"
      scale-x="1"
-     inkscape:zoom="6.8070916"
-     inkscape:cx="47.744326"
-     inkscape:cy="46.642533"
+     inkscape:zoom="8.5057776"
+     inkscape:cx="53.728186"
+     inkscape:cy="51.082925"
      inkscape:window-width="1920"
      inkscape:window-height="1027"
      inkscape:window-x="0"
@@ -60,11 +60,11 @@
        xlink:href="#linearGradient12986"
        id="radialGradient12988"
        cx="74.039528"
-       cy="82.77343"
+       cy="81.284096"
        fx="74.039528"
-       fy="82.77343"
+       fy="81.284096"
        r="10.177137"
-       gradientTransform="matrix(0.82623896,3.1400962e-8,-6.6658594e-8,0.68715302,12.326704,25.797525)"
+       gradientTransform="matrix(0.71283348,-5.7414447e-8,1.142322e-8,0.68715302,20.723186,25.797532)"
        gradientUnits="userSpaceOnUse"
        spreadMethod="pad" />
   </defs>
@@ -89,17 +89,17 @@
               <path
                  id="rect2617-1-9-5"
                  style="fill:#c8b7b7;stroke-width:0.277433;stroke-linecap:round;stroke-linejoin:round"
-                 d="m 74.655184,82.16384 6.988031,-3.35099 v 8.016655 l -6.924849,3.752477 z"
+                 d="m 74.655184,82.16384 7.089726,-3.411343 v 8.016655 l -7.026544,3.81283 z"
                  sodipodi:nodetypes="ccccc" />
               <path
                  id="rect2617-2-09-6-81"
                  style="fill:#c8b7b7;stroke-width:0.277433;stroke-linecap:round;stroke-linejoin:round"
-                 d="m 65.485234,86.829505 6.924849,3.752477 0.0068,-8.418142 -6.931664,-3.35099 z"
+                 d="m 65.422051,86.769152 6.988032,3.81283 0.0068,-8.418142 -6.994832,-3.411343 z"
                  sodipodi:nodetypes="ccccc" />
               <path
                  id="rect2617-2-1-3-6-4"
-                 style="fill:#e3dbdb;stroke-width:0.277433;stroke-linecap:round;stroke-linejoin:round"
-                 d="m 65.814988,76.766044 7.721053,3.752371 8.107174,-3.752371 -8.078991,-3.411342 z"
+                 style="fill:#c8b7b7;fill-opacity:1;stroke-width:0.277433;stroke-linecap:round;stroke-linejoin:round"
+                 d="m 65.751806,76.705692 7.749235,3.752477 8.078991,-3.752477 -8.078991,-3.240775 z"
                  sodipodi:nodetypes="ccccc" />
             </g>
             <path
