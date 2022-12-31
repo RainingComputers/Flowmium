@@ -1,4 +1,4 @@
-![](logo.svg)
+<img src="./logo.svg" width="128px"><br>
 
 # Flowmium
 
