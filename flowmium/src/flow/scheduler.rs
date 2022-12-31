@@ -1,13 +1,21 @@
 use super::model::Task;
 
+enum FlowStatus {
+    Running,
+    Success,
+    Failed,
+}
+
 struct FlowState {
     id: usize,
     plan: Vec<Vec<usize>>,
     current_stage: usize,
     running_tasks: Vec<usize>,
     finished_tasks: Vec<usize>,
+    failed_tasks: Vec<usize>,
     task_definitions: Vec<Task>,
     flow_name: String,
+    status: FlowStatus,
 }
 
 impl FlowState {
@@ -23,8 +31,10 @@ impl FlowState {
             current_stage: 0,
             running_tasks: vec![],
             finished_tasks: vec![],
+            failed_tasks: vec![],
             task_definitions,
             flow_name,
+            status: FlowStatus::Running,
         }
     }
 }
@@ -41,7 +51,7 @@ struct Scheduler {
 
 impl Scheduler {
     fn create_flow(
-        mut self,
+        &mut self,
         flow_name: String,
         plan: Vec<Vec<usize>>,
         task_definitions: Vec<Task>,
@@ -58,7 +68,7 @@ impl Scheduler {
         return 0;
     }
 
-    fn mark_task_running(mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+    fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
             return Err(SchedulerError::FlowDoesNotExist);
         };
@@ -68,10 +78,7 @@ impl Scheduler {
         return Ok(());
     }
 
-    fn schedule_next_stage<'a>(
-        &'a self,
-        flow_id: usize,
-    ) -> Result<Option<Vec<&Task>>, SchedulerError> {
+    fn schedule_next_stage(&self, flow_id: usize) -> Result<Option<Vec<&Task>>, SchedulerError> {
         let Some(flow) = self.flow_runs.get(flow_id) else {
             return Err(SchedulerError::FlowDoesNotExist);
         };
@@ -103,7 +110,7 @@ impl Scheduler {
         return Ok(Some(stage_tasks));
     }
 
-    fn mark_task_finished(mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+    fn mark_task_finished(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
             return Err(SchedulerError::FlowDoesNotExist);
         };
@@ -112,14 +119,34 @@ impl Scheduler {
 
         flow.finished_tasks.push(task_id);
 
+        if flow.running_tasks.len() == 0 {
+            flow.status = FlowStatus::Success;
+        }
+
         return Ok(());
     }
 
-    fn get_running_flows(self) -> Vec<usize> {
-        self.flow_runs
-            .into_iter()
-            .filter(|flow_state| flow_state.running_tasks.len() != 0)
-            .map(|flow_state| flow_state.id)
-            .collect()
+    fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+        let Some(flow) = self.flow_runs.get_mut(flow_id) else {
+            return Err(SchedulerError::FlowDoesNotExist);
+        };
+
+        flow.running_tasks.retain(|id| *id != task_id);
+
+        flow.failed_tasks.push(task_id);
+
+        flow.status = FlowStatus::Failed;
+
+        return Ok(());
+    }
+
+    fn mark_flow_failed(&mut self, flow_id: usize) -> Result<(), SchedulerError> {
+        let Some(flow) = self.flow_runs.get_mut(flow_id) else {
+            return Err(SchedulerError::FlowDoesNotExist);
+        };
+
+        flow.status = FlowStatus::Failed;
+
+        return Ok(());
     }
 }
