@@ -1,6 +1,6 @@
 use std::collections::{btree_set::BTreeSet, BTreeMap};
 
-use super::graph::is_cyclic;
+use super::graph::{is_cyclic, Node};
 use super::model::{ContainerDAGFlow, Task};
 
 enum ExecutorError {
@@ -17,12 +17,17 @@ fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&str, usize> {
     return task_id_map;
 }
 
-fn construct_nodes(tasks: &Vec<Task>, task_id_map: &BTreeMap<&str, usize>) -> Vec<BTreeSet<usize>> {
-    let mut nodes: Vec<BTreeSet<usize>> = tasks.iter().map(|_| BTreeSet::new()).collect();
+fn construct_nodes(tasks: &Vec<Task>, task_id_map: &BTreeMap<&str, usize>) -> Vec<Node> {
+    let mut nodes: Vec<Node> = tasks
+        .iter()
+        .map(|_| Node {
+            children: BTreeSet::new(),
+        })
+        .collect();
 
     for (index, task) in tasks.iter().enumerate() {
         for dep in &task.depends {
-            nodes[index].insert(task_id_map[&dep[..]]);
+            nodes[index].children.insert(task_id_map[&dep[..]]);
         }
     }
 
@@ -160,11 +165,21 @@ mod tests {
         let nodes = construct_nodes(&test_tasks, &task_id_map);
 
         let expected_nodes = vec![
-            BTreeSet::from([1, 2, 3, 4]),
-            BTreeSet::from([3]),
-            BTreeSet::from([3]),
-            BTreeSet::from([4]),
-            BTreeSet::new(),
+            Node {
+                children: BTreeSet::from([1, 2, 3, 4]),
+            },
+            Node {
+                children: BTreeSet::from([3]),
+            },
+            Node {
+                children: BTreeSet::from([3]),
+            },
+            Node {
+                children: BTreeSet::from([4]),
+            },
+            Node {
+                children: BTreeSet::new(),
+            },
         ];
 
         assert_eq!(nodes, expected_nodes);
