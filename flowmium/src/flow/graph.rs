@@ -9,9 +9,9 @@ pub fn is_cyclic(nodes: &Vec<Node>) -> bool {
     let mut discovered = BTreeSet::new();
     let mut finished = BTreeSet::new();
 
-    for (index, node) in nodes.iter().enumerate() {
-        if !discovered.contains(&index) && !finished.contains(&index) {
-            if is_cyclic_visit(nodes, index, node, &mut discovered, &mut finished) {
+    for (node_id, node) in nodes.iter().enumerate() {
+        if !discovered.contains(&node_id) && !finished.contains(&node_id) {
+            if is_cyclic_visit(nodes, node_id, node, &mut discovered, &mut finished) {
                 return true;
             }
         }
