@@ -12,6 +12,41 @@ pub struct Node {
     pub children: BTreeSet<usize>,
 }
 
+fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
+    let mut task_id_map: BTreeMap<&String, usize> = BTreeMap::new();
+
+    for (index, task) in tasks.iter().enumerate() {
+        task_id_map.insert(&task.name, index);
+    }
+
+    return task_id_map;
+}
+
+fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
+    let task_id_map = construct_task_id_map(tasks);
+
+    let mut nodes: Vec<Node> = vec![];
+
+    for task in tasks.iter() {
+        let mut node = Node {
+            children: BTreeSet::new(),
+        };
+
+        for dep in task.depends.iter() {
+            let child_node_id = match task_id_map.get(&dep) {
+                None => return Err(PlannerError::DependentTaskDoesNotExistError),
+                Some(id) => *id,
+            };
+
+            node.children.insert(child_node_id);
+        }
+
+        nodes.push(node);
+    }
+
+    return Ok(nodes);
+}
+
 fn is_cyclic_visit(
     nodes: &Vec<Node>,
     node_id: usize,
@@ -52,41 +87,6 @@ pub fn is_cyclic(nodes: &Vec<Node>) -> bool {
     }
 
     return false;
-}
-
-fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
-    let mut task_id_map: BTreeMap<&String, usize> = BTreeMap::new();
-
-    for (index, task) in tasks.iter().enumerate() {
-        task_id_map.insert(&task.name, index);
-    }
-
-    return task_id_map;
-}
-
-fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
-    let task_id_map = construct_task_id_map(tasks);
-
-    let mut nodes: Vec<Node> = vec![];
-
-    for task in tasks.iter() {
-        let mut node = Node {
-            children: BTreeSet::new(),
-        };
-
-        for dep in task.depends.iter() {
-            let child_node_id = match task_id_map.get(&dep) {
-                None => return Err(PlannerError::DependentTaskDoesNotExistError),
-                Some(id) => *id,
-            };
-
-            node.children.insert(child_node_id);
-        }
-
-        nodes.push(node);
-    }
-
-    return Ok(nodes);
 }
 
 fn node_depends_on_node(dependent: &Node, dependee_id: usize, nodes: &Vec<Node>) -> bool {
