@@ -1,15 +1,61 @@
+use super::model::Task;
 use std::collections::{btree_set::BTreeSet, BTreeMap};
 
-use super::graph::{is_cyclic, Node};
-use super::model::{ContainerDAGFlow, Task};
-
 #[derive(Debug, PartialEq)]
-enum ExecutorError {
+pub enum PlannerError {
     CyclicDependenciesError,
+    DependentTaskDoesNotExistError,
 }
 
-fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&str, usize> {
-    let mut task_id_map: BTreeMap<&str, usize> = BTreeMap::new();
+#[derive(PartialEq, Debug)]
+pub struct Node {
+    pub children: BTreeSet<usize>,
+}
+
+fn is_cyclic_visit(
+    nodes: &Vec<Node>,
+    node_id: usize,
+    node: &Node,
+    discovered: &mut BTreeSet<usize>,
+    finished: &mut BTreeSet<usize>,
+) -> bool {
+    discovered.insert(node_id);
+
+    for v in node.children.iter() {
+        if discovered.contains(&v) {
+            return true;
+        }
+
+        if !finished.contains(&v) {
+            if is_cyclic_visit(nodes, *v, &nodes[*v], discovered, finished) {
+                return true;
+            }
+        }
+    }
+
+    discovered.remove(&node_id);
+    finished.insert(node_id);
+
+    return false;
+}
+
+pub fn is_cyclic(nodes: &Vec<Node>) -> bool {
+    let mut discovered = BTreeSet::new();
+    let mut finished = BTreeSet::new();
+
+    for (node_id, node) in nodes.iter().enumerate() {
+        if !discovered.contains(&node_id) && !finished.contains(&node_id) {
+            if is_cyclic_visit(nodes, node_id, node, &mut discovered, &mut finished) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
+    let mut task_id_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (index, task) in tasks.iter().enumerate() {
         task_id_map.insert(&task.name, index);
@@ -18,43 +64,62 @@ fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&str, usize> {
     return task_id_map;
 }
 
-fn construct_nodes(tasks: &Vec<Task>, task_id_map: &BTreeMap<&str, usize>) -> Vec<Node> {
-    // TODO clean up and remove [] indexing
+fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
+    let task_id_map = construct_task_id_map(tasks);
 
-    let mut nodes: Vec<Node> = tasks
-        .iter()
-        .map(|_| Node {
+    let mut nodes: Vec<Node> = vec![];
+
+    for task in tasks.iter() {
+        let mut node = Node {
             children: BTreeSet::new(),
-        })
-        .collect();
+        };
 
-    for (index, task) in tasks.iter().enumerate() {
-        for dep in &task.depends {
-            nodes[index].children.insert(task_id_map[&dep[..]]);
+        for dep in task.depends.iter() {
+            let child_node_id = match task_id_map.get(&dep) {
+                None => return Err(PlannerError::DependentTaskDoesNotExistError),
+                Some(id) => *id,
+            };
+
+            node.children.insert(child_node_id);
+        }
+
+        nodes.push(node);
+    }
+
+    return Ok(nodes);
+}
+
+fn node_depends_on_node(dependent: &Node, dependee_id: usize, nodes: &Vec<Node>) -> bool {
+    if dependent.children.contains(&dependee_id) {
+        return true;
+    }
+
+    for child_node_id in dependent.children.iter() {
+        let child_of_dependent = &nodes[*child_node_id];
+
+        if node_depends_on_node(child_of_dependent, dependee_id, nodes) {
+            return true;
         }
     }
 
-    return nodes;
+    return false;
 }
 
 fn node_depends_on_stage(node: &Node, stage: &BTreeSet<usize>, nodes: &Vec<Node>) -> bool {
-    if node.children.is_disjoint(stage) {
-        for child_node_id in &node.children {
-            let child_node = &nodes[*child_node_id]; // TODO: Prove that [] indexing is okay and wont error
-            return node_depends_on_stage(&child_node, stage, nodes);
+    for stage_node_id in stage {
+        if node_depends_on_node(node, *stage_node_id, nodes) {
+            return true;
         }
-
-        return false;
     }
 
-    return true;
+    return false;
 }
 
 fn stage_depends_on_node(node_id: usize, stage: &BTreeSet<usize>, nodes: &Vec<Node>) -> bool {
     for stage_node_id in stage {
-        let stage_node = &nodes[*stage_node_id]; // TODO: Prove that [] indexing is okay and wont error
+        let stage_node = &nodes[*stage_node_id];
 
-        if stage_node.children.contains(&node_id) {
+        if node_depends_on_node(stage_node, node_id, nodes) {
             return true;
         }
     }
@@ -70,38 +135,30 @@ fn add_node_to_plan(
 ) {
     for (stage_index, stage) in plan.into_iter().enumerate() {
         if node_depends_on_stage(node, stage, nodes) {
-            println!("Node {} depends on stage {}", node_id, stage_index);
             continue;
         } else if stage_depends_on_node(node_id, stage, nodes) {
-            println!("Stage {} depends on node {}", stage_index, node_id);
             plan.insert(stage_index, BTreeSet::from([node_id]));
             return;
         } else {
-            println!("Adding node {} to existing stage {}", stage_index, node_id);
             stage.insert(node_id);
             return;
         }
     }
 
-    println!("Creating new stage for {}", node_id);
     plan.push(BTreeSet::from([node_id]));
 }
 
-fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, ExecutorError> {
-    let task_id_map = construct_task_id_map(tasks);
-    let nodes = construct_nodes(tasks, &task_id_map);
-
-    println!("The nodes are {:?}", nodes);
+pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, PlannerError> {
+    let nodes = construct_nodes(tasks)?;
 
     if is_cyclic(&nodes) {
-        return Err(ExecutorError::CyclicDependenciesError);
+        return Err(PlannerError::CyclicDependenciesError);
     }
 
     let mut plan: Vec<BTreeSet<usize>> = vec![];
 
     for (node_id, node) in nodes.iter().enumerate() {
         add_node_to_plan(node_id, node, &mut plan, &nodes);
-        println!("The plan is {:?}", plan);
     }
 
     return Ok(plan);
@@ -111,8 +168,49 @@ fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, ExecutorErr
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_is_cyclic() {
+        let test_acyclic_nodes = vec![
+            Node {
+                children: BTreeSet::from([1, 2, 3, 4]),
+            },
+            Node {
+                children: BTreeSet::from([3]),
+            },
+            Node {
+                children: BTreeSet::from([3]),
+            },
+            Node {
+                children: BTreeSet::from([4]),
+            },
+            Node {
+                children: BTreeSet::new(),
+            },
+        ];
+
+        let test_cyclic_nodes = vec![
+            Node {
+                children: BTreeSet::from([1, 2, 3, 4]),
+            },
+            Node {
+                children: BTreeSet::from([3]),
+            },
+            Node {
+                children: BTreeSet::from([1]),
+            },
+            Node {
+                children: BTreeSet::from([0]),
+            },
+            Node {
+                children: BTreeSet::new(),
+            },
+        ];
+
+        assert_eq!(is_cyclic(&test_acyclic_nodes), false);
+        assert_eq!(is_cyclic(&test_cyclic_nodes), true);
+    }
+
     fn test_tasks() -> Vec<Task> {
-        // TODO: More complex example, remove println! statements
         vec![
             Task {
                 name: "E".to_string(),
@@ -170,11 +268,9 @@ mod tests {
     #[test]
     fn test_construct_deps() {
         let test_tasks = test_tasks();
-        let task_id_map = construct_task_id_map(&test_tasks);
+        let nodes = construct_nodes(&test_tasks);
 
-        let nodes = construct_nodes(&test_tasks, &task_id_map);
-
-        let expected_nodes = vec![
+        let expected_nodes = Ok(vec![
             Node {
                 children: BTreeSet::new(),
             },
@@ -190,7 +286,7 @@ mod tests {
             Node {
                 children: BTreeSet::from([3]),
             },
-        ];
+        ]);
 
         assert_eq!(nodes, expected_nodes);
     }
