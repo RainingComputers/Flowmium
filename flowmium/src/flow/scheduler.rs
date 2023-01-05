@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::model::Task;
 
 enum FlowStatus {
@@ -10,9 +12,9 @@ struct FlowState {
     id: usize,
     plan: Vec<Vec<usize>>,
     current_stage: usize,
-    running_tasks: Vec<usize>,
-    finished_tasks: Vec<usize>,
-    failed_tasks: Vec<usize>,
+    running_tasks: BTreeSet<usize>,
+    finished_tasks: BTreeSet<usize>,
+    failed_tasks: BTreeSet<usize>,
     task_definitions: Vec<Task>,
     flow_name: String,
     status: FlowStatus,
@@ -29,9 +31,9 @@ impl FlowState {
             id,
             plan,
             current_stage: 0,
-            running_tasks: vec![],
-            finished_tasks: vec![],
-            failed_tasks: vec![],
+            running_tasks: BTreeSet::new(),
+            finished_tasks: BTreeSet::new(),
+            failed_tasks: BTreeSet::new(),
             task_definitions,
             flow_name,
             status: FlowStatus::Running,
@@ -73,7 +75,7 @@ impl Scheduler {
             return Err(SchedulerError::FlowDoesNotExist);
         };
 
-        flow.running_tasks.push(task_id);
+        flow.running_tasks.insert(task_id);
 
         return Ok(());
     }
@@ -88,7 +90,7 @@ impl Scheduler {
         };
 
         for task_id in stage {
-            match flow.finished_tasks.get(*task_id) {
+            match flow.finished_tasks.get(&task_id) {
                 None => {
                     return Ok(None);
                 }
@@ -115,11 +117,10 @@ impl Scheduler {
             return Err(SchedulerError::FlowDoesNotExist);
         };
 
-        flow.running_tasks.retain(|id| *id != task_id);
+        flow.running_tasks.remove(&task_id);
+        flow.finished_tasks.insert(task_id);
 
-        flow.finished_tasks.push(task_id);
-
-        if flow.running_tasks.len() == 0 {
+        if flow.finished_tasks.len() == flow.task_definitions.len() {
             flow.status = FlowStatus::Success;
         }
 
@@ -131,9 +132,8 @@ impl Scheduler {
             return Err(SchedulerError::FlowDoesNotExist);
         };
 
-        flow.running_tasks.retain(|id| *id != task_id);
-
-        flow.failed_tasks.push(task_id);
+        flow.running_tasks.remove(&task_id);
+        flow.failed_tasks.insert(task_id);
 
         flow.status = FlowStatus::Failed;
 
