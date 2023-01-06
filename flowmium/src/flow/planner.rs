@@ -1,11 +1,5 @@
-use super::model::Task;
+use super::{errors::FlowError, model::Task};
 use std::collections::{btree_set::BTreeSet, BTreeMap};
-
-#[derive(Debug, PartialEq)]
-pub enum PlannerError {
-    CyclicDependenciesError,
-    DependentTaskDoesNotExistError,
-}
 
 #[derive(PartialEq, Debug)]
 pub struct Node {
@@ -22,7 +16,7 @@ fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
     return task_id_map;
 }
 
-fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
+fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, FlowError> {
     let task_id_map = construct_task_id_map(tasks);
 
     let mut nodes: Vec<Node> = vec![];
@@ -34,7 +28,7 @@ fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
 
         for dep in task.depends.iter() {
             let child_node_id = match task_id_map.get(&dep) {
-                None => return Err(PlannerError::DependentTaskDoesNotExistError),
+                None => return Err(FlowError::DependentTaskDoesNotExistError),
                 Some(id) => *id,
             };
 
@@ -148,11 +142,11 @@ fn add_node_to_plan(
     plan.push(BTreeSet::from([node_id]));
 }
 
-pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, PlannerError> {
+pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, FlowError> {
     let nodes = construct_nodes(tasks)?;
 
     if is_cyclic(&nodes) {
-        return Err(PlannerError::CyclicDependenciesError);
+        return Err(FlowError::CyclicDependenciesError);
     }
 
     let mut plan: Vec<BTreeSet<usize>> = vec![];

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::model::Task;
+use super::{errors::FlowError, model::Task};
 
 enum FlowStatus {
     Running,
@@ -8,9 +8,10 @@ enum FlowStatus {
     Failed,
 }
 
+// TODO: Add task status
 struct FlowState {
     id: usize,
-    plan: Vec<Vec<usize>>,
+    plan: Vec<BTreeSet<usize>>,
     current_stage: usize,
     running_tasks: BTreeSet<usize>,
     finished_tasks: BTreeSet<usize>,
@@ -24,7 +25,7 @@ impl FlowState {
     fn create_flow_state(
         id: usize,
         flow_name: String,
-        plan: Vec<Vec<usize>>,
+        plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
     ) -> FlowState {
         FlowState {
@@ -41,21 +42,15 @@ impl FlowState {
     }
 }
 
-enum SchedulerError {
-    FlowDoesNotExist,
-    StageDoesNotExist,
-    TaskDoesNotExist,
-}
-
-struct Scheduler {
+pub struct Scheduler {
     flow_runs: Vec<FlowState>,
 }
 
 impl Scheduler {
-    fn create_flow(
+    pub fn create_flow(
         &mut self,
         flow_name: String,
-        plan: Vec<Vec<usize>>,
+        plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
     ) -> usize {
         let id = self.flow_runs.len();
@@ -70,9 +65,9 @@ impl Scheduler {
         return 0;
     }
 
-    fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+    pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(SchedulerError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExist);
         };
 
         flow.running_tasks.insert(task_id);
@@ -80,41 +75,34 @@ impl Scheduler {
         return Ok(());
     }
 
-    fn schedule_next_stage(&self, flow_id: usize) -> Result<Option<Vec<&Task>>, SchedulerError> {
+    pub fn schedule_next_stage(&self, flow_id: usize) -> Result<Option<Vec<&Task>>, FlowError> {
         let Some(flow) = self.flow_runs.get(flow_id) else {
-            return Err(SchedulerError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExist);
         };
 
         let Some(stage) = flow.plan.get(flow.current_stage) else {
-            return Err(SchedulerError::StageDoesNotExist);
+            return Err(FlowError::StageDoesNotExist);
         };
 
-        for task_id in stage {
-            match flow.finished_tasks.get(&task_id) {
-                None => {
-                    return Ok(None);
-                }
-                _ => (),
-            }
+        if !flow.finished_tasks.is_disjoint(&stage) {
+            return Ok(None);
         }
 
-        let mut stage_tasks: Vec<&Task> = vec![];
+        let Some(next_Stage) = flow.plan.get(flow.current_stage+1) else {
+            return Ok(None);
+        };
 
-        for option_task in stage.into_iter().map(|id| flow.task_definitions.get(*id)) {
-            match option_task {
-                None => {
-                    return Err(SchedulerError::TaskDoesNotExist);
-                }
-                Some(task) => stage_tasks.push(task),
-            }
-        }
+        let tasks = next_Stage
+            .iter()
+            .map(|id| &flow.task_definitions[*id])
+            .collect();
 
-        return Ok(Some(stage_tasks));
+        return Ok(Some(tasks));
     }
 
-    fn mark_task_finished(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+    pub fn mark_task_finished(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(SchedulerError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExist);
         };
 
         flow.running_tasks.remove(&task_id);
@@ -127,9 +115,9 @@ impl Scheduler {
         return Ok(());
     }
 
-    fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), SchedulerError> {
+    pub fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(SchedulerError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExist);
         };
 
         flow.running_tasks.remove(&task_id);
@@ -140,9 +128,9 @@ impl Scheduler {
         return Ok(());
     }
 
-    fn mark_flow_failed(&mut self, flow_id: usize) -> Result<(), SchedulerError> {
+    pub fn mark_flow_failed(&mut self, flow_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(SchedulerError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExist);
         };
 
         flow.status = FlowStatus::Failed;
