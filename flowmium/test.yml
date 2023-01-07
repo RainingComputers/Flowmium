@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shnootalk-playground-server
+  labels:
+    app: shnootalk-playground-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shnootalk-playground-server
+  template:
+    metadata:
+      labels:
+        app: shnootalk-playground-server
+    spec:
+      containers:
+        - name: shnootalk-playground-server
+          image: docker.io/shnoo28/shnootalk-playground-server:0.3.4
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 250m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          env:
+            - name: WORK_DIR_BASE
+              value: "/work-dir/"
+          volumeMounts:
+            - name: work-dir
+              mountPath: /work-dir/
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - >
+                  curl --fail-with-body \
+                    --header "Content-Type: application/json" \
+                    --request POST \
+                    --data '{"main.shtk": "fn main() -> int { println(\"Hello world\") return 0 }"}' \
+                    http://127.0.0.1:8000/shnootalk-playground/api/v2/compile
+            initialDelaySeconds: 10
+            periodSeconds: 200
+      volumes:
+        - name: work-dir
+          emptyDir:
+            medium: Memory

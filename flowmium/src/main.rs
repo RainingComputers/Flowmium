@@ -1,11 +1,18 @@
-mod flow;
+use k8s_openapi::api::core::v1::Pod;
+use kube::{
+    api::{Api, ListParams, ResourceExt},
+    Client,
+};
 
-use flow::model::Task;
-use flow::planner::construct_plan;
-use std::process::ExitCode;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Infer the runtime environment and try to create a Kubernetes Client
+    let client = Client::try_default().await?;
 
-fn main() -> ExitCode {
-    let tasks: Vec<Task> = vec![];
-    construct_plan(&tasks);
-    return ExitCode::SUCCESS;
+    // Read pods in the configured namespace into the typed interface from k8s-openapi
+    let pods: Api<Pod> = Api::default_namespaced(client);
+    for p in pods.list(&ListParams::default()).await? {
+        println!("found pod {}", p.name_any());
+    }
+    Ok(())
 }

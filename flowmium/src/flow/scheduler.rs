@@ -62,7 +62,7 @@ impl Scheduler {
             task_definitions,
         ));
 
-        return 0;
+        return id;
     }
 
     pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
@@ -75,7 +75,10 @@ impl Scheduler {
         return Ok(());
     }
 
-    pub fn schedule_next_stage(&self, flow_id: usize) -> Result<Option<Vec<&Task>>, FlowError> {
+    pub fn schedule_next_stage(
+        &self,
+        flow_id: usize,
+    ) -> Result<Option<Vec<(usize, &Task)>>, FlowError> {
         let Some(flow) = self.flow_runs.get(flow_id) else {
             return Err(FlowError::FlowDoesNotExist);
         };
@@ -88,13 +91,13 @@ impl Scheduler {
             return Ok(None);
         }
 
-        let Some(next_Stage) = flow.plan.get(flow.current_stage+1) else {
+        let Some(next_stage) = flow.plan.get(flow.current_stage+1) else {
             return Ok(None);
         };
 
-        let tasks = next_Stage
+        let tasks = next_stage
             .iter()
-            .map(|id| &flow.task_definitions[*id])
+            .map(|id| (*id, &flow.task_definitions[*id]))
             .collect();
 
         return Ok(Some(tasks));
