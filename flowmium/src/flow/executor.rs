@@ -1,11 +1,15 @@
 use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
+use super::model::Flow;
 use super::model::Task;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
 
+use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::{api::batch::v1::Job, serde_json};
+use kube::api::ListParams;
 use kube::{api::PostParams, Api, Client};
+use tokio::time::error::Elapsed;
 
 pub struct RunnerStatus {
     pub pending: Vec<(usize, usize)>,
@@ -17,7 +21,7 @@ pub struct RunnerStatus {
 async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, FlowError> {
     let Ok(client) = Client::try_default().await else {
         // TODO logging
-        return Err(FlowError::UnableToSpawnTaskError)
+        return Err(FlowError::UnableToConnectToKubernetes)
     };
 
     let jobs: Api<Job> = Api::default_namespaced(client);
@@ -68,16 +72,74 @@ pub async fn run_tasks(flow_id: usize, tasks: Vec<(usize, &Task)>) -> Result<(),
     return Ok(());
 }
 
-pub fn status() -> RunnerStatus {
-    return RunnerStatus {
+pub fn get_flow_task_id(pod: &Pod) -> Result<(usize, usize), FlowError> {
+    // TODO: find a way to reduce boiler plate?
+
+    let Some(annotations) = &pod.metadata.annotations else {
+        return Err(FlowError::InvalidTaskInstanceError);
+    };
+
+    let Some(flow_id_string) = annotations.get("flowmium.io/flow-id") else {
+        return Err(FlowError::InvalidTaskInstanceError);
+    };
+
+    let Some(task_id_string) = annotations.get("flowmium.io/task-id") else {
+        return Err(FlowError::InvalidTaskInstanceError);
+    };
+
+    let Ok(flow_id) = flow_id_string.parse::<usize>() else {
+        return Err(FlowError::InvalidTaskInstanceError);
+    };
+
+    let Ok(task_id) = task_id_string.parse::<usize>() else {
+        return Err(FlowError::InvalidTaskInstanceError);
+    };
+
+    Ok((flow_id, task_id))
+}
+
+pub async fn get_status() -> Result<RunnerStatus, FlowError> {
+    let mut runner_status = RunnerStatus {
         pending: vec![],
         running: vec![],
         finished: vec![],
         failed: vec![],
     };
+
+    let Ok(client) = Client::try_default().await else {
+        // TODO logging
+        return Err(FlowError::UnableToConnectToKubernetes)
+    };
+
+    let pods: Api<Pod> = Api::default_namespaced(client);
+    let Ok(pod_list) = pods.list(&ListParams::default()).await else {
+        return Err(FlowError::UnableToConnectToKubernetes);
+    };
+
+    for pod in pod_list {
+        let (flow_id, task_id) = get_flow_task_id(&pod)?;
+
+        // TODO log errors and continue on error
+        let Some(pod_status) = &pod.status else {
+            return Err(FlowError::InvalidTaskInstanceError);
+        };
+
+        let Some(phase) = &pod_status.phase else {
+            return Err(FlowError::CyclicDependenciesError);
+        };
+
+        match &phase[..] {
+            "Succeeded" => runner_status.finished.push((flow_id, task_id)),
+            "Running" => runner_status.running.push((flow_id, task_id)),
+            "Failed" => runner_status.failed.push((flow_id, task_id)),
+            _ => return Err(FlowError::InvalidTaskInstanceError),
+        }
+    }
+
+    return Ok(runner_status);
 }
 
-async fn instantiate_flow(
+pub async fn instantiate_flow(
     flow: ContainerDAGFlow,
     sched: &mut Scheduler,
 ) -> Result<usize, FlowError> {
@@ -94,11 +156,10 @@ async fn instantiate_flow(
     return Ok(flow_id);
 }
 
-async fn schedule_and_run_tasks(
-    status: RunnerStatus,
-    sched: &mut Scheduler,
-) -> Result<(), FlowError> {
+pub async fn schedule_and_run_tasks(sched: &mut Scheduler) -> Result<(), FlowError> {
     // TODO log errors and continue on error
+
+    let status = get_status().await?;
 
     for (flow_id, task_id) in status.finished {
         sched.mark_task_finished(flow_id, task_id)?;

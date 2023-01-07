@@ -6,5 +6,6 @@ pub enum FlowError {
     StageDoesNotExistError,
     TaskDoesNotExistError,
     UnableToSpawnTaskError,
-    CorruptedTaskError,
+    UnableToConnectToKubernetes,
+    InvalidTaskInstanceError,
 }

@@ -1,30 +1,85 @@
 mod flow;
 
-// use flow::model::Task;
-// use flow::planner::construct_plan;
-// use std::process::ExitCode;
+use std::{process::ExitCode, thread::sleep, time::Duration};
 
-// fn main() -> ExitCode {
-//     let tasks: Vec<Task> = vec![];
-//     construct_plan(&tasks);
-//     return ExitCode::SUCCESS;
-// }
-
-use k8s_openapi::api::core::v1::Pod;
-use kube::{
-    api::{Api, ListParams, ResourceExt},
-    Client,
+use flow::{
+    executor::{instantiate_flow, schedule_and_run_tasks},
+    model::{ContainerDAGFlow, Flow, Task},
+    scheduler::Scheduler,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Infer the runtime environment and try to create a Kubernetes Client
-    let client = Client::try_default().await?;
+async fn main() -> ExitCode {
+    let flow = ContainerDAGFlow {
+        name: "hello-world".to_owned(),
+        schedule: Some("".to_owned()),
+        tasks: vec![
+            Task {
+                name: "E".to_string(),
+                image: "".to_string(),
+                depends: vec![],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: None,
+            },
+            Task {
+                name: "B".to_string(),
+                image: "".to_string(),
+                depends: vec!["D".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: None,
+            },
+            Task {
+                name: "A".to_string(),
+                image: "".to_string(),
+                depends: vec![
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                ],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: None,
+            },
+            Task {
+                name: "D".to_string(),
+                image: "".to_string(),
+                depends: vec!["E".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: None,
+            },
+            Task {
+                name: "C".to_string(),
+                image: "".to_string(),
+                depends: vec!["D".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: None,
+            },
+        ],
+    };
 
-    // Read pods in the configured namespace into the typed interface from k8s-openapi
-    let pods: Api<Pod> = Api::default_namespaced(client);
-    for p in pods.list(&ListParams::default()).await? {
-        println!("found pod {}", p.name_any());
+    let mut sched = Scheduler { flow_runs: vec![] };
+
+    match instantiate_flow(flow, &mut sched).await {
+        Ok(_) => (),
+        Err(_) => return ExitCode::FAILURE,
+    };
+
+    loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        match schedule_and_run_tasks(&mut sched).await {
+            Ok(()) => (),
+            Err(_) => return ExitCode::FAILURE,
+        };
     }
-    Ok(())
 }

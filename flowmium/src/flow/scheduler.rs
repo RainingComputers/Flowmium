@@ -8,7 +8,7 @@ enum FlowStatus {
     Failed,
 }
 
-struct FlowState {
+pub struct FlowState {
     id: usize,
     plan: Vec<BTreeSet<usize>>,
     current_stage: usize,
@@ -42,7 +42,7 @@ impl FlowState {
 }
 
 pub struct Scheduler {
-    flow_runs: Vec<FlowState>,
+    pub flow_runs: Vec<FlowState>,
 }
 
 impl Scheduler {
