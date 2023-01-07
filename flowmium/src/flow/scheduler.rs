@@ -8,7 +8,6 @@ enum FlowStatus {
     Failed,
 }
 
-// TODO: Add task status
 struct FlowState {
     id: usize,
     plan: Vec<BTreeSet<usize>>,
@@ -67,7 +66,7 @@ impl Scheduler {
 
     pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(FlowError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExistError);
         };
 
         flow.running_tasks.insert(task_id);
@@ -75,37 +74,51 @@ impl Scheduler {
         return Ok(());
     }
 
+    fn stage_to_tasks<'a>(
+        stage: &'a BTreeSet<usize>,
+        task_definitions: &'a Vec<Task>,
+    ) -> Vec<(usize, &'a Task)> {
+        stage
+            .iter()
+            .map(|id| (*id, &task_definitions[*id]))
+            .collect()
+    }
+
     pub fn schedule_next_stage(
-        &self,
+        &mut self,
         flow_id: usize,
     ) -> Result<Option<Vec<(usize, &Task)>>, FlowError> {
-        let Some(flow) = self.flow_runs.get(flow_id) else {
-            return Err(FlowError::FlowDoesNotExist);
+        let Some(flow) = self.flow_runs.get_mut(flow_id) else {
+            return Err(FlowError::FlowDoesNotExistError);
         };
 
         let Some(stage) = flow.plan.get(flow.current_stage) else {
-            return Err(FlowError::StageDoesNotExist);
+            return Err(FlowError::StageDoesNotExistError);
         };
 
-        if !flow.finished_tasks.is_disjoint(&stage) {
+        if flow.current_stage == 0 {
+            let tasks = Scheduler::stage_to_tasks(stage, &flow.task_definitions);
+
+            return Ok(Some(tasks));
+        }
+
+        if !stage.is_subset(&flow.finished_tasks) {
             return Ok(None);
         }
 
-        let Some(next_stage) = flow.plan.get(flow.current_stage+1) else {
+        flow.current_stage += 1;
+        let Some(next_stage) = flow.plan.get(flow.current_stage) else {
             return Ok(None);
         };
 
-        let tasks = next_stage
-            .iter()
-            .map(|id| (*id, &flow.task_definitions[*id]))
-            .collect();
+        let tasks = Scheduler::stage_to_tasks(next_stage, &flow.task_definitions);
 
         return Ok(Some(tasks));
     }
 
     pub fn mark_task_finished(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(FlowError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExistError);
         };
 
         flow.running_tasks.remove(&task_id);
@@ -120,7 +133,7 @@ impl Scheduler {
 
     pub fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(FlowError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExistError);
         };
 
         flow.running_tasks.remove(&task_id);
@@ -133,7 +146,7 @@ impl Scheduler {
 
     pub fn mark_flow_failed(&mut self, flow_id: usize) -> Result<(), FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            return Err(FlowError::FlowDoesNotExist);
+            return Err(FlowError::FlowDoesNotExistError);
         };
 
         flow.status = FlowStatus::Failed;

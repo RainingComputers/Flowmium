@@ -2,7 +2,9 @@
 pub enum FlowError {
     CyclicDependenciesError,
     DependentTaskDoesNotExistError,
-    FlowDoesNotExist,
-    StageDoesNotExist,
-    TaskDoesNotExist,
+    FlowDoesNotExistError,
+    StageDoesNotExistError,
+    TaskDoesNotExistError,
+    UnableToSpawnTaskError,
+    CorruptedTaskError,
 }
