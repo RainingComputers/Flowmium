@@ -15,7 +15,7 @@ async fn main() -> ExitCode {
         schedule: Some("".to_owned()),
         tasks: vec![
             Task {
-                name: "E".to_string(),
+                name: "task-e".to_string(),
                 image: "".to_string(),
                 depends: vec![],
                 cmd: vec![],
@@ -24,22 +24,22 @@ async fn main() -> ExitCode {
                 outputs: None,
             },
             Task {
-                name: "B".to_string(),
+                name: "task-b".to_string(),
                 image: "".to_string(),
-                depends: vec!["D".to_string()],
+                depends: vec!["task-d".to_string()],
                 cmd: vec![],
                 env: vec![],
                 inputs: None,
                 outputs: None,
             },
             Task {
-                name: "A".to_string(),
+                name: "task-a".to_string(),
                 image: "".to_string(),
                 depends: vec![
-                    "B".to_string(),
-                    "C".to_string(),
-                    "D".to_string(),
-                    "E".to_string(),
+                    "task-b".to_string(),
+                    "task-c".to_string(),
+                    "task-d".to_string(),
+                    "task-e".to_string(),
                 ],
                 cmd: vec![],
                 env: vec![],
@@ -47,18 +47,18 @@ async fn main() -> ExitCode {
                 outputs: None,
             },
             Task {
-                name: "D".to_string(),
+                name: "task-d".to_string(),
                 image: "".to_string(),
-                depends: vec!["E".to_string()],
+                depends: vec!["task-e".to_string()],
                 cmd: vec![],
                 env: vec![],
                 inputs: None,
                 outputs: None,
             },
             Task {
-                name: "C".to_string(),
+                name: "task-c".to_string(),
                 image: "".to_string(),
-                depends: vec!["D".to_string()],
+                depends: vec!["task-d".to_string()],
                 cmd: vec![],
                 env: vec![],
                 inputs: None,
@@ -71,15 +71,23 @@ async fn main() -> ExitCode {
 
     match instantiate_flow(flow, &mut sched).await {
         Ok(_) => (),
-        Err(_) => return ExitCode::FAILURE,
+        Err(err) => {
+            println!("Error {:?}", err);
+            return ExitCode::FAILURE;
+        }
     };
 
     loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        println!("Scheduler state is {:?}", sched.flow_runs);
 
         match schedule_and_run_tasks(&mut sched).await {
             Ok(()) => (),
-            Err(_) => return ExitCode::FAILURE,
+            Err(err) => {
+                println!("Error {:?}", err);
+                return ExitCode::FAILURE;
+            }
         };
     }
 }

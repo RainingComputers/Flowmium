@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "Debug (MacOS)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/flowmium",
+            "cwd": "${fileDirname}"
+        }
+    ]
+}

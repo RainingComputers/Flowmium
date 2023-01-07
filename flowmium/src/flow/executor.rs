@@ -1,6 +1,5 @@
 use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
-use super::model::Flow;
 use super::model::Task;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
@@ -9,7 +8,6 @@ use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::{api::batch::v1::Job, serde_json};
 use kube::api::ListParams;
 use kube::{api::PostParams, Api, Client};
-use tokio::time::error::Elapsed;
 
 pub struct RunnerStatus {
     pub pending: Vec<(usize, usize)>,
@@ -56,8 +54,10 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
 
     match jobs.create(&PostParams::default(), &data).await {
         Ok(job) => Ok(job),
-        // TODO logging
-        Err(error) => Err(FlowError::UnableToSpawnTaskError),
+        Err(error) => {
+            println!("Unable to spawn job because {:?}", error);
+            Err(FlowError::UnableToSpawnTaskError)
+        }
     }
 }
 
@@ -117,7 +117,13 @@ pub async fn get_status() -> Result<RunnerStatus, FlowError> {
     };
 
     for pod in pod_list {
-        let (flow_id, task_id) = get_flow_task_id(&pod)?;
+        let (flow_id, task_id) = match get_flow_task_id(&pod) {
+            Ok(id) => id,
+            Err(_) => {
+                println!("Ignoring invalid pod {:?}", pod.metadata.name);
+                continue;
+            }
+        };
 
         // TODO log errors and continue on error
         let Some(pod_status) = &pod.status else {
@@ -125,14 +131,23 @@ pub async fn get_status() -> Result<RunnerStatus, FlowError> {
         };
 
         let Some(phase) = &pod_status.phase else {
-            return Err(FlowError::CyclicDependenciesError);
+            return Err(FlowError::InvalidTaskInstanceError);
         };
 
         match &phase[..] {
-            "Succeeded" => runner_status.finished.push((flow_id, task_id)),
+            "Pending" => runner_status.pending.push((flow_id, task_id)),
             "Running" => runner_status.running.push((flow_id, task_id)),
+            "Succeeded" => runner_status.finished.push((flow_id, task_id)),
             "Failed" => runner_status.failed.push((flow_id, task_id)),
-            _ => return Err(FlowError::InvalidTaskInstanceError),
+            _ => {
+                return {
+                    print!(
+                        "Unrecognized phase {:?} for pod {:?}",
+                        phase, pod.metadata.name
+                    );
+                    Err(FlowError::InvalidTaskInstanceError)
+                }
+            }
         }
     }
 
@@ -146,12 +161,10 @@ pub async fn instantiate_flow(
     // TODO logging ?
     let plan = construct_plan(&flow.tasks)?;
 
-    let flow_id = sched.create_flow(flow.name, plan, flow.tasks);
+    let (flow_id, tasks) = sched.create_flow(flow.name, plan, flow.tasks);
 
-    if let Some(tasks) = sched.schedule_next_stage(flow_id)? {
-        // TODO logging ?
-        run_tasks(flow_id, tasks).await?;
-    };
+    // TODO logging ?
+    run_tasks(flow_id, tasks).await?;
 
     return Ok(flow_id);
 }
@@ -165,6 +178,7 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) -> Result<(), FlowErr
         sched.mark_task_finished(flow_id, task_id)?;
 
         if let Some(tasks) = sched.schedule_next_stage(flow_id)? {
+            println!("Running tasks {:?}", tasks);
             run_tasks(flow_id, tasks).await?;
         }
     }
