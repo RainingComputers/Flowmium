@@ -1,15 +1,24 @@
 mod flow;
 
-use std::{process::ExitCode, thread::sleep, time::Duration};
+use std::{process::ExitCode, time::Duration};
 
 use flow::{
     executor::{instantiate_flow, schedule_and_run_tasks},
-    model::{ContainerDAGFlow, Flow, Task},
+    model::{ContainerDAGFlow, Task},
     scheduler::Scheduler,
 };
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let subscriber = tracing_subscriber::fmt().with_line_number(true).finish();
+    match tracing::subscriber::set_global_default(subscriber) {
+        Ok(()) => (),
+        Err(_) => {
+            eprintln!("Cannot initialize logger");
+            return ExitCode::FAILURE;
+        }
+    };
+
     let flow = ContainerDAGFlow {
         name: "hello-world".to_owned(),
         schedule: Some("".to_owned()),
@@ -71,8 +80,7 @@ async fn main() -> ExitCode {
 
     match instantiate_flow(flow, &mut sched).await {
         Ok(_) => (),
-        Err(err) => {
-            println!("Error {:?}", err);
+        Err(_) => {
             return ExitCode::FAILURE;
         }
     };
@@ -80,14 +88,9 @@ async fn main() -> ExitCode {
     loop {
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        println!("Scheduler state is {:?}", sched.flow_runs);
-
-        match schedule_and_run_tasks(&mut sched).await {
-            Ok(()) => (),
-            Err(err) => {
-                println!("Error {:?}", err);
-                return ExitCode::FAILURE;
-            }
+        if let Err(error) = schedule_and_run_tasks(&mut sched).await {
+            tracing::error!(%error, "Scheduler has exited");
+            return ExitCode::FAILURE;
         };
     }
 }

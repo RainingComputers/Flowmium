@@ -43,6 +43,7 @@ impl FlowState {
     }
 }
 
+#[derive(Debug)]
 pub struct Scheduler {
     pub flow_runs: Vec<FlowState>,
 }

@@ -16,11 +16,21 @@ pub struct RunnerStatus {
     pub failed: Vec<(usize, usize)>,
 }
 
+async fn get_kubernetes_client() -> Result<Client, FlowError> {
+    match Client::try_default().await {
+        Ok(client) => Ok(client),
+        Err(error) => {
+            tracing::error!(%error, "Unable to connect to kubernetes");
+            return Err(FlowError::UnableToConnectToKubernetes);
+        }
+    }
+}
+
+#[tracing::instrument]
 async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, FlowError> {
-    let Ok(client) = Client::try_default().await else {
-        // TODO logging
-        return Err(FlowError::UnableToConnectToKubernetes)
-    };
+    tracing::info!("Spawning task");
+
+    let client = get_kubernetes_client().await?;
 
     let jobs: Api<Job> = Api::default_namespaced(client);
 
@@ -55,49 +65,57 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
     match jobs.create(&PostParams::default(), &data).await {
         Ok(job) => Ok(job),
         Err(error) => {
-            println!("Unable to spawn job because {:?}", error);
+            tracing::error!(%error, "Unable to spawn job");
             Err(FlowError::UnableToSpawnTaskError)
         }
     }
 }
 
-pub async fn run_tasks(flow_id: usize, tasks: Vec<(usize, &Task)>) -> Result<(), FlowError> {
-    for (task_id, task) in tasks {
-        if let Err(err) = spawn_task(flow_id, task_id, task).await {
-            // TODO logging and continue
-            return Err(err);
-        };
-    }
+#[tracing::instrument(skip(tasks))]
+pub async fn run_tasks(flow_id: usize, tasks: Vec<(usize, &Task)>) {
+    // TODO Propagate error
 
-    return Ok(());
+    for (task_id, task) in tasks {
+        let _ = spawn_task(flow_id, task_id, task).await;
+    }
 }
 
-pub fn get_flow_task_id(pod: &Pod) -> Result<(usize, usize), FlowError> {
-    // TODO: find a way to reduce boiler plate?
+#[tracing::instrument]
+pub fn get_flow_task_id(pod: &Pod) -> Option<(usize, usize)> {
+    // TODO: make this optional
+    // TODO make flowmium.io/flow-id an env variable
+    // TODO make flowmium.io/task-id an env variable
 
     let Some(annotations) = &pod.metadata.annotations else {
-        return Err(FlowError::InvalidTaskInstanceError);
+        tracing::warn!("Invalid pod with missing annotations");
+        return None;
     };
 
     let Some(flow_id_string) = annotations.get("flowmium.io/flow-id") else {
-        return Err(FlowError::InvalidTaskInstanceError);
+        
+        tracing::warn!("Invalid pod with missing 'flowmium.io/flow-id' annotation"); 
+        return None;
     };
 
     let Some(task_id_string) = annotations.get("flowmium.io/task-id") else {
-        return Err(FlowError::InvalidTaskInstanceError);
+        tracing::warn!("Invalid pod with missing 'flowmium.io/task-id' annotation"); 
+        return None;
     };
 
     let Ok(flow_id) = flow_id_string.parse::<usize>() else {
-        return Err(FlowError::InvalidTaskInstanceError);
+        tracing::warn!("Invalid pod with non integer value for 'flowmium.io/flow-id' annotation"); 
+        return None;
     };
 
     let Ok(task_id) = task_id_string.parse::<usize>() else {
-        return Err(FlowError::InvalidTaskInstanceError);
+        tracing::warn!("Invalid pod with non integer value for 'flowmium.io/task-id' annotation"); 
+        return None;
     };
 
-    Ok((flow_id, task_id))
+    Some((flow_id, task_id))
 }
 
+#[tracing::instrument]
 pub async fn get_status() -> Result<RunnerStatus, FlowError> {
     let mut runner_status = RunnerStatus {
         pending: vec![],
@@ -106,32 +124,31 @@ pub async fn get_status() -> Result<RunnerStatus, FlowError> {
         failed: vec![],
     };
 
-    let Ok(client) = Client::try_default().await else {
-        // TODO logging
-        return Err(FlowError::UnableToConnectToKubernetes)
-    };
+    let client = get_kubernetes_client().await?;
 
     let pods: Api<Pod> = Api::default_namespaced(client);
     let Ok(pod_list) = pods.list(&ListParams::default()).await else {
+        tracing::error!("Unable to list pods");
         return Err(FlowError::UnableToConnectToKubernetes);
     };
 
     for pod in pod_list {
-        let (flow_id, task_id) = match get_flow_task_id(&pod) {
-            Ok(id) => id,
-            Err(_) => {
-                println!("Ignoring invalid pod {:?}", pod.metadata.name);
-                continue;
-            }
+        // TODO: propagate errors
+
+        let pod_name = &pod.metadata.name;
+
+        let Some((flow_id, task_id)) = get_flow_task_id(&pod) else {
+            continue;
         };
 
-        // TODO log errors and continue on error
         let Some(pod_status) = &pod.status else {
-            return Err(FlowError::InvalidTaskInstanceError);
+            tracing::warn!(pod_name = pod_name, "Pod with invalid status");
+            continue;
         };
 
         let Some(phase) = &pod_status.phase else {
-            return Err(FlowError::InvalidTaskInstanceError);
+            tracing::warn!(pod_name=pod_name, "Pod with invalid pah");
+            continue;
         };
 
         match &phase[..] {
@@ -139,14 +156,9 @@ pub async fn get_status() -> Result<RunnerStatus, FlowError> {
             "Running" => runner_status.running.push((flow_id, task_id)),
             "Succeeded" => runner_status.finished.push((flow_id, task_id)),
             "Failed" => runner_status.failed.push((flow_id, task_id)),
-            _ => {
-                return {
-                    print!(
-                        "Unrecognized phase {:?} for pod {:?}",
-                        phase, pod.metadata.name
-                    );
-                    Err(FlowError::InvalidTaskInstanceError)
-                }
+            _ => { 
+                tracing::warn!(pod_name=pod_name, "Pod with invalid phase");
+                continue;
             }
         }
     }
@@ -154,6 +166,7 @@ pub async fn get_status() -> Result<RunnerStatus, FlowError> {
     return Ok(runner_status);
 }
 
+#[tracing::instrument(skip(sched, flow))]
 pub async fn instantiate_flow(
     flow: ContainerDAGFlow,
     sched: &mut Scheduler,
@@ -161,14 +174,15 @@ pub async fn instantiate_flow(
     // TODO logging ?
     let plan = construct_plan(&flow.tasks)?;
 
+    tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
     let (flow_id, tasks) = sched.create_flow(flow.name, plan, flow.tasks);
 
-    // TODO logging ?
-    run_tasks(flow_id, tasks).await?;
+    run_tasks(flow_id, tasks).await;
 
     return Ok(flow_id);
 }
 
+#[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &mut Scheduler) -> Result<(), FlowError> {
     // TODO log errors and continue on error
 
@@ -176,15 +190,16 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) -> Result<(), FlowErr
 
     for (flow_id, task_id) in status.finished {
         sched.mark_task_finished(flow_id, task_id)?;
+        tracing::debug!(flow_id = flow_id, task_id = task_id, "Finished task");
 
         if let Some(tasks) = sched.schedule_next_stage(flow_id)? {
-            println!("Running tasks {:?}", tasks);
-            run_tasks(flow_id, tasks).await?;
+            run_tasks(flow_id, tasks).await;
         }
     }
 
     for (flow_id, task_id) in status.failed {
-        sched.mark_task_failed(flow_id, task_id)?
+        sched.mark_task_failed(flow_id, task_id)?;
+        tracing::warn!(flow_id = flow_id, task_id = task_id, "Task failed");
     }
 
     return Ok(());
