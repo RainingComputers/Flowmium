@@ -1,7 +1,21 @@
 [package]
 name = "flowmium"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
+license = "MIT"
+description = "CLI tool to validate and format json files"
+homepage = "https://github.com/RainingComputers/Flowmium"
+repository = "https://github.com/RainingComputers/Flowmium"
+documentation = "https://github.com/RainingComputers/Flowmium"
+readme = "../README.md"
+authors = ["RainingComputers <vishnu.vish.shankar@gmail.com>"]
+keywords = ["kubernetes"]
+categories = ["algorithms"]
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
