@@ -88,9 +88,6 @@ async fn main() -> ExitCode {
     loop {
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        if let Err(error) = schedule_and_run_tasks(&mut sched).await {
-            tracing::error!(%error, "Scheduler has exited");
-            return ExitCode::FAILURE;
-        };
+        schedule_and_run_tasks(&mut sched).await;
     }
 }

@@ -7,13 +7,15 @@ use super::scheduler::Scheduler;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::{api::batch::v1::Job, serde_json};
 use kube::api::ListParams;
+use kube::core::ObjectList;
 use kube::{api::PostParams, Api, Client};
 
-pub struct RunnerStatus {
-    pub pending: Vec<(usize, usize)>,
-    pub running: Vec<(usize, usize)>,
-    pub finished: Vec<(usize, usize)>,
-    pub failed: Vec<(usize, usize)>,
+enum TaskStatus {
+    Pending,
+    Running,
+    Finished,
+    Failed,
+    Unknown,
 }
 
 async fn get_kubernetes_client() -> Result<Client, FlowError> {
@@ -21,7 +23,7 @@ async fn get_kubernetes_client() -> Result<Client, FlowError> {
         Ok(client) => Ok(client),
         Err(error) => {
             tracing::error!(%error, "Unable to connect to kubernetes");
-            return Err(FlowError::UnableToConnectToKubernetes);
+            return Err(FlowError::UnableToConnectToKubernetesError);
         }
     }
 }
@@ -44,7 +46,7 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
             "template": {
                 "metadata": {
                     "name": task.name,
-                    "annotations": {
+                    "labels": {
                         "flowmium.io/flow-id": flow_id.to_string(),
                         "flowmium.io/task-id": task_id.to_string()
                     }
@@ -71,99 +73,70 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
     }
 }
 
-#[tracing::instrument(skip(tasks))]
-pub async fn run_tasks(flow_id: usize, tasks: Vec<(usize, &Task)>) {
-    // TODO Propagate error
-
-    for (task_id, task) in tasks {
-        let _ = spawn_task(flow_id, task_id, task).await;
-    }
-}
-
 #[tracing::instrument]
-pub fn get_flow_task_id(pod: &Pod) -> Option<(usize, usize)> {
-    // TODO: make this optional
-    // TODO make flowmium.io/flow-id an env variable
-    // TODO make flowmium.io/task-id an env variable
-
-    let Some(annotations) = &pod.metadata.annotations else {
-        tracing::warn!("Invalid pod with missing annotations");
-        return None;
-    };
-
-    let Some(flow_id_string) = annotations.get("flowmium.io/flow-id") else {
-        
-        tracing::warn!("Invalid pod with missing 'flowmium.io/flow-id' annotation"); 
-        return None;
-    };
-
-    let Some(task_id_string) = annotations.get("flowmium.io/task-id") else {
-        tracing::warn!("Invalid pod with missing 'flowmium.io/task-id' annotation"); 
-        return None;
-    };
-
-    let Ok(flow_id) = flow_id_string.parse::<usize>() else {
-        tracing::warn!("Invalid pod with non integer value for 'flowmium.io/flow-id' annotation"); 
-        return None;
-    };
-
-    let Ok(task_id) = task_id_string.parse::<usize>() else {
-        tracing::warn!("Invalid pod with non integer value for 'flowmium.io/task-id' annotation"); 
-        return None;
-    };
-
-    Some((flow_id, task_id))
-}
-
-#[tracing::instrument]
-pub async fn get_status() -> Result<RunnerStatus, FlowError> {
-    let mut runner_status = RunnerStatus {
-        pending: vec![],
-        running: vec![],
-        finished: vec![],
-        failed: vec![],
-    };
-
+async fn list_pods(flow_id: usize, task_id: usize) -> Result<ObjectList<Pod>, FlowError> {
     let client = get_kubernetes_client().await?;
 
-    let pods: Api<Pod> = Api::default_namespaced(client);
-    let Ok(pod_list) = pods.list(&ListParams::default()).await else {
-        tracing::error!("Unable to list pods");
-        return Err(FlowError::UnableToConnectToKubernetes);
+    let pods_api: Api<Pod> = Api::namespaced(client, "default"); // TODO: Env variable for namespace
+
+    let label_selector = format!(
+        "flowmium.io/flow-id={},flowmium.io/task-id={}", // TODO: Env variable for these labels
+        flow_id, task_id
+    );
+
+    let mut list_params = ListParams::default();
+    list_params = list_params.labels(&label_selector);
+
+    let pod_list = match pods_api.list(&list_params).await {
+        Ok(list) => list,
+        Err(error) => {
+            tracing::error!(%error, "Unable to list pods");
+            return Err(FlowError::UnableToConnectToKubernetesError);
+        }
     };
 
-    for pod in pod_list {
-        // TODO: propagate errors
+    return Ok(pod_list);
+}
 
-        let pod_name = &pod.metadata.name;
+fn get_pod_phase(pod: Pod) -> Option<String> {
+    let pod_status = pod.status?;
+    let phase = pod_status.phase?;
 
-        let Some((flow_id, task_id)) = get_flow_task_id(&pod) else {
-            continue;
-        };
+    return Some(phase);
+}
 
-        let Some(pod_status) = &pod.status else {
-            tracing::warn!(pod_name = pod_name, "Pod with invalid status");
-            continue;
-        };
+fn phase_to_task_status(phase: String) -> TaskStatus {
+    match &phase[..] {
+        "Pending" => TaskStatus::Pending,
+        "Running" => TaskStatus::Running,
+        "Succeeded" => TaskStatus::Finished,
+        "Failed" => TaskStatus::Failed,
+        _ => TaskStatus::Unknown,
+    }
+}
 
-        let Some(phase) = &pod_status.phase else {
-            tracing::warn!(pod_name=pod_name, "Pod with invalid pah");
-            continue;
-        };
+#[tracing::instrument]
+async fn get_task_status(flow_id: usize, task_id: usize) -> Result<TaskStatus, FlowError> {
+    let pod_list = list_pods(flow_id, task_id).await?;
+    let mut pod_iter = pod_list.iter();
 
-        match &phase[..] {
-            "Pending" => runner_status.pending.push((flow_id, task_id)),
-            "Running" => runner_status.running.push((flow_id, task_id)),
-            "Succeeded" => runner_status.finished.push((flow_id, task_id)),
-            "Failed" => runner_status.failed.push((flow_id, task_id)),
-            _ => { 
-                tracing::warn!(pod_name=pod_name, "Pod with invalid phase");
-                continue;
-            }
-        }
+    let Some(pod) = pod_iter.next() else {
+        tracing::error!("Cannot find corresponding pod for task");
+        return Err(FlowError::UnexpectedRunnerStateError);
+    };
+
+    if pod_iter.peekable().peek().is_some() {
+        tracing::error!("Found duplicate pod for task");
+        return Err(FlowError::UnexpectedRunnerStateError);
     }
 
-    return Ok(runner_status);
+    let Some(phase) = get_pod_phase(pod.to_owned()) else {
+        tracing::error!("Unable to fetch status for pod");
+        return Err(FlowError::UnexpectedRunnerStateError)
+    };
+
+    let status = phase_to_task_status(phase);
+    return Ok(status);
 }
 
 #[tracing::instrument(skip(sched, flow))]
@@ -171,36 +144,63 @@ pub async fn instantiate_flow(
     flow: ContainerDAGFlow,
     sched: &mut Scheduler,
 ) -> Result<usize, FlowError> {
-    // TODO logging ?
     let plan = construct_plan(&flow.tasks)?;
 
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
-    let (flow_id, tasks) = sched.create_flow(flow.name, plan, flow.tasks);
-
-    run_tasks(flow_id, tasks).await;
+    let flow_id = sched.create_flow(flow.name, plan, flow.tasks);
 
     return Ok(flow_id);
 }
 
 #[tracing::instrument(skip(sched))]
-pub async fn schedule_and_run_tasks(sched: &mut Scheduler) -> Result<(), FlowError> {
-    // TODO log errors and continue on error
+pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
+    for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
+        let option_tasks = match sched.schedule_tasks(flow_id) {
+            Ok(option_tasks) => option_tasks,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch next stage");
+                continue;
+            }
+        };
 
-    let status = get_status().await?;
+        if let Some(tasks) = option_tasks {
+            for (task_id, task) in tasks {
+                match spawn_task(flow_id, task_id, &task).await {
+                    Ok(_) => {
+                        if let Err(error) = sched.mark_task_running(flow_id, task_id) {
+                            tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
+                            continue;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
 
-    for (flow_id, task_id) in status.finished {
-        sched.mark_task_finished(flow_id, task_id)?;
-        tracing::debug!(flow_id = flow_id, task_id = task_id, "Finished task");
+            continue;
+        }
 
-        if let Some(tasks) = sched.schedule_next_stage(flow_id)? {
-            run_tasks(flow_id, tasks).await;
+        for task_id in running_tasks {
+            let status = match get_task_status(flow_id, task_id).await {
+                Ok(status) => status,
+                Err(error) => {
+                    tracing::error!(%error, "Unable to fetch status, marking flow {} task {} as failed", flow_id, task_id);
+                    if let Err(error) = sched.mark_task_failed(flow_id, task_id) {
+                        tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
+                    }
+                    continue;
+                }
+            };
+
+            if let Err(error) = match status {
+                TaskStatus::Pending | TaskStatus::Running => Ok(()),
+                TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id),
+                TaskStatus::Failed | TaskStatus::Unknown => {
+                    sched.mark_task_failed(flow_id, task_id)
+                }
+            } {
+                tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
+                continue;
+            }
         }
     }
-
-    for (flow_id, task_id) in status.failed {
-        sched.mark_task_failed(flow_id, task_id)?;
-        tracing::warn!(flow_id = flow_id, task_id = task_id, "Task failed");
-    }
-
-    return Ok(());
 }

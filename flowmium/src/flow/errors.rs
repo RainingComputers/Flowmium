@@ -8,8 +8,9 @@ pub enum FlowError {
     StageDoesNotExistError,
     TaskDoesNotExistError,
     UnableToSpawnTaskError,
-    UnableToConnectToKubernetes,
-    InvalidTaskInstanceError,
+    UnableToConnectToKubernetesError,
+    UnexpectedRunnerStateError,
+    FlowAlreadyTerminatedError,
 }
 
 impl fmt::Display for FlowError {

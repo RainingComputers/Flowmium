@@ -1,9 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::{btree_set, BTreeSet};
+
+use k8s_openapi::serde_json::map::Iter;
 
 use super::{errors::FlowError, model::Task};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum FlowStatus {
+    Pending,
     Running,
     Success,
     Failed,
@@ -38,8 +41,12 @@ impl FlowState {
             failed_tasks: BTreeSet::new(),
             task_definitions,
             flow_name,
-            status: FlowStatus::Running,
+            status: FlowStatus::Pending,
         }
+    }
+
+    pub fn running_tasks(&self) -> BTreeSet<usize> {
+        return self.running_tasks.clone();
     }
 }
 
@@ -54,7 +61,7 @@ impl Scheduler {
         flow_name: String,
         plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
-    ) -> (usize, Vec<(usize, &Task)>) {
+    ) -> usize {
         let id = self.flow_runs.len();
 
         self.flow_runs.push(FlowState::create_flow_state(
@@ -64,14 +71,12 @@ impl Scheduler {
             task_definitions,
         ));
 
-        let flow = self.flow_runs.last_mut().unwrap();
-
-        let tasks = Scheduler::stage_to_tasks(&flow.plan[0], &flow.task_definitions);
-
-        return (id, tasks);
+        return id;
     }
 
     pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
+        // TODO check if not already running
+
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
             return Err(FlowError::FlowDoesNotExistError);
         };
@@ -81,35 +86,41 @@ impl Scheduler {
         return Ok(());
     }
 
-    fn stage_to_tasks<'a>(
-        stage: &'a BTreeSet<usize>,
-        task_definitions: &'a Vec<Task>,
-    ) -> Vec<(usize, &'a Task)> {
+    fn stage_to_tasks(stage: &BTreeSet<usize>, task_definitions: &Vec<Task>) -> Vec<(usize, Task)> {
         stage
             .iter()
-            .map(|id| (*id, &task_definitions[*id]))
+            .map(|id| (*id, task_definitions[*id].clone()))
             .collect()
     }
 
-    pub fn schedule_next_stage(
+    pub fn schedule_tasks(
         &mut self,
         flow_id: usize,
-    ) -> Result<Option<Vec<(usize, &Task)>>, FlowError> {
+    ) -> Result<Option<Vec<(usize, Task)>>, FlowError> {
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
             return Err(FlowError::FlowDoesNotExistError);
         };
+
+        if flow.status != FlowStatus::Running && flow.status != FlowStatus::Pending {
+            return Ok(None);
+        }
 
         let Some(stage) = flow.plan.get(flow.current_stage) else {
             return Err(FlowError::StageDoesNotExistError);
         };
 
-        if !stage.is_subset(&flow.finished_tasks) {
+        if !stage.is_subset(&flow.finished_tasks) && flow.status == FlowStatus::Running {
             return Ok(None);
         }
 
-        (*flow).current_stage += 1;
+        if flow.status == FlowStatus::Pending {
+            (*flow).status = FlowStatus::Running;
+        } else {
+            (*flow).current_stage += 1;
+        }
+
         let Some(next_stage) = flow.plan.get(flow.current_stage) else {
-            return Ok(None);
+            return Err(FlowError::StageDoesNotExistError);
         };
 
         let tasks = Scheduler::stage_to_tasks(next_stage, &flow.task_definitions);
@@ -143,5 +154,14 @@ impl Scheduler {
         (*flow).status = FlowStatus::Failed;
 
         return Ok(());
+    }
+
+    pub fn get_running_or_pending_flows(&self) -> Vec<(usize, BTreeSet<usize>)> {
+        return self
+            .flow_runs
+            .iter()
+            .filter(|flow| flow.status == FlowStatus::Running || flow.status == FlowStatus::Pending)
+            .map(|flow| (flow.id, flow.running_tasks()))
+            .collect();
     }
 }
