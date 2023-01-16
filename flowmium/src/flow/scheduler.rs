@@ -1,6 +1,4 @@
-use std::collections::{btree_set, BTreeSet};
-
-use k8s_openapi::serde_json::map::Iter;
+use std::collections::{BTreeSet};
 
 use super::{errors::FlowError, model::Task};
 
@@ -75,8 +73,6 @@ impl Scheduler {
     }
 
     pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
-        // TODO check if not already running
-
         let Some(flow) = self.flow_runs.get_mut(flow_id) else {
             return Err(FlowError::FlowDoesNotExistError);
         };

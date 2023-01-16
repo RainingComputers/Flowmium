@@ -80,7 +80,7 @@ async fn list_pods(flow_id: usize, task_id: usize) -> Result<ObjectList<Pod>, Fl
     let pods_api: Api<Pod> = Api::namespaced(client, "default"); // TODO: Env variable for namespace
 
     let label_selector = format!(
-        "flowmium.io/flow-id={},flowmium.io/task-id={}", // TODO: Env variable for these labels
+        "flowmium.io/flow-id={},flowmium.io/task-id={}",
         flow_id, task_id
     );
 
@@ -168,7 +168,7 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
                 match spawn_task(flow_id, task_id, &task).await {
                     Ok(_) => {
                         if let Err(error) = sched.mark_task_running(flow_id, task_id) {
-                            tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
+                            tracing::error!(%error, "Unable to mark task running for flow {} and task {}", flow_id, task_id);
                             continue;
                         }
                     }
@@ -185,7 +185,7 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
                 Err(error) => {
                     tracing::error!(%error, "Unable to fetch status, marking flow {} task {} as failed", flow_id, task_id);
                     if let Err(error) = sched.mark_task_failed(flow_id, task_id) {
-                        tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
+                        tracing::error!(%error, "Unable to mark task failed for flow {} and task {}", flow_id, task_id);
                     }
                     continue;
                 }
