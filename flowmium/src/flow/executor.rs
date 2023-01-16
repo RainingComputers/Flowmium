@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
 use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
+use super::model::Flow;
 use super::model::Task;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
@@ -153,54 +157,54 @@ pub async fn instantiate_flow(
 }
 
 #[tracing::instrument(skip(sched))]
+async fn sched_pending_tasks(sched: &mut Scheduler, flow_id: usize) -> Result<bool, FlowError> {
+    let option_tasks = sched.schedule_tasks(flow_id)?;
+
+    if let Some(tasks) = option_tasks {
+        for (task_id, task) in tasks {
+            match spawn_task(flow_id, task_id, &task).await {
+                Ok(_) => sched.mark_task_running(flow_id, task_id)?,
+                Err(_) => break,
+            }
+        }
+
+        return Ok(true);
+    }
+
+    return Ok(false);
+}
+
+#[tracing::instrument(skip(sched))]
+async fn mark_running_task(
+    sched: &mut Scheduler,
+    flow_id: usize,
+    task_id: usize,
+) -> Result<(), FlowError> {
+    let status = match get_task_status(flow_id, task_id).await {
+        Ok(status) => status,
+        Err(_) => return sched.mark_task_failed(flow_id, task_id),
+    };
+
+    return match status {
+        TaskStatus::Pending | TaskStatus::Running => Ok(()),
+        TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id),
+        TaskStatus::Failed | TaskStatus::Unknown => sched.mark_task_failed(flow_id, task_id),
+    };
+}
+
+#[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
     for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
-        let option_tasks = match sched.schedule_tasks(flow_id) {
-            Ok(option_tasks) => option_tasks,
-            Err(error) => {
-                tracing::error!(%error, "Unable to fetch next stage");
-                continue;
-            }
-        };
-
-        if let Some(tasks) = option_tasks {
-            for (task_id, task) in tasks {
-                match spawn_task(flow_id, task_id, &task).await {
-                    Ok(_) => {
-                        if let Err(error) = sched.mark_task_running(flow_id, task_id) {
-                            tracing::error!(%error, "Unable to mark task running for flow {} and task {}", flow_id, task_id);
-                            continue;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-
-            continue;
+        match sched_pending_tasks(sched, flow_id).await {
+            Ok(true) => continue,
+            Ok(false) => (),
+            Err(_) => break,
         }
 
         for task_id in running_tasks {
-            let status = match get_task_status(flow_id, task_id).await {
-                Ok(status) => status,
-                Err(error) => {
-                    tracing::error!(%error, "Unable to fetch status, marking flow {} task {} as failed", flow_id, task_id);
-                    if let Err(error) = sched.mark_task_failed(flow_id, task_id) {
-                        tracing::error!(%error, "Unable to mark task failed for flow {} and task {}", flow_id, task_id);
-                    }
-                    continue;
-                }
+            if let Err(_) = mark_running_task(sched, flow_id, task_id).await {
+                break;
             };
-
-            if let Err(error) = match status {
-                TaskStatus::Pending | TaskStatus::Running => Ok(()),
-                TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id),
-                TaskStatus::Failed | TaskStatus::Unknown => {
-                    sched.mark_task_failed(flow_id, task_id)
-                }
-            } {
-                tracing::error!(%error, "Unable to mark task status for flow {} and task {}", flow_id, task_id);
-                continue;
-            }
         }
     }
 }

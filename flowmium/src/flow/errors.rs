@@ -13,7 +13,6 @@ pub enum FlowError {
 
 impl fmt::Display for FlowError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Use `self.number` to refer to each positional data point.
         write!(f, "{:?}", self)
     }
 }
