@@ -1,9 +1,5 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-
 use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
-use super::model::Flow;
 use super::model::Task;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
@@ -194,6 +190,13 @@ async fn mark_running_task(
 
 #[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
+    // e2e test cases
+    // 1. happy
+    // 2. task failed
+    // 2. pod killed
+    // 3. cluster killed
+    // 4. db killed
+
     for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
         match sched_pending_tasks(sched, flow_id).await {
             Ok(true) => continue,
