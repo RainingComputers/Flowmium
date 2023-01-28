@@ -10,6 +10,7 @@ use kube::api::ListParams;
 use kube::core::ObjectList;
 use kube::{api::PostParams, Api, Client};
 
+#[derive(Debug, PartialEq)]
 enum TaskStatus {
     Pending,
     Running,
@@ -55,7 +56,7 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
                     "containers": [{
                         "name": task.name,
                         "image": "alpine:latest",
-                        "command": ["sleep", "5"],
+                        "command": ["sleep", "0.5"],
                     }],
                     "restartPolicy": "Never",
                 }
@@ -171,7 +172,7 @@ async fn sched_pending_tasks(sched: &mut Scheduler, flow_id: usize) -> Result<bo
 }
 
 #[tracing::instrument(skip(sched))]
-async fn mark_running_task(
+async fn mark_running_tasks(
     sched: &mut Scheduler,
     flow_id: usize,
     task_id: usize,
@@ -196,6 +197,7 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
     // 2. pod killed
     // 3. cluster killed
     // 4. db killed
+    // 5. duplicate pod
 
     for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
         match sched_pending_tasks(sched, flow_id).await {
@@ -205,9 +207,122 @@ pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
         }
 
         for task_id in running_tasks {
-            if let Err(_) = mark_running_task(sched, flow_id, task_id).await {
+            if let Err(_) = mark_running_tasks(sched, flow_id, task_id).await {
                 break;
             };
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::time::Duration;
+
+    use kube::api::DeleteParams;
+
+    use super::*;
+
+    async fn delete_all_pods() {
+        let client = get_kubernetes_client().await.unwrap();
+
+        let pods_api: Api<Pod> = Api::namespaced(client, "default");
+
+        pods_api
+            .delete_collection(&DeleteParams::default(), &ListParams::default())
+            .await
+            .unwrap();
+    }
+
+    async fn delete_all_jobs() {
+        let client = get_kubernetes_client().await.unwrap();
+
+        let jobs_api: Api<Job> = Api::namespaced(client, "default");
+
+        jobs_api
+            .delete_collection(&DeleteParams::default(), &ListParams::default())
+            .await
+            .unwrap();
+    }
+
+    fn test_flow() -> ContainerDAGFlow {
+        ContainerDAGFlow {
+            name: "hello-world".to_owned(),
+            schedule: Some("".to_owned()),
+            tasks: vec![
+                Task {
+                    name: "task-e".to_string(),
+                    image: "".to_string(),
+                    depends: vec![],
+                    cmd: vec![],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-b".to_string(),
+                    image: "".to_string(),
+                    depends: vec!["task-d".to_string()],
+                    cmd: vec![],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-a".to_string(),
+                    image: "".to_string(),
+                    depends: vec![
+                        "task-b".to_string(),
+                        "task-c".to_string(),
+                        "task-d".to_string(),
+                        "task-e".to_string(),
+                    ],
+                    cmd: vec![],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-d".to_string(),
+                    image: "".to_string(),
+                    depends: vec!["task-e".to_string()],
+                    cmd: vec![],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-c".to_string(),
+                    image: "".to_string(),
+                    depends: vec!["task-d".to_string()],
+                    cmd: vec![],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn test_schedule_and_run_tasks() {
+        delete_all_jobs().await;
+        delete_all_pods().await;
+
+        let mut sched = Scheduler { flow_runs: vec![] };
+
+        let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
+
+        for _ in 0..30 {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            schedule_and_run_tasks(&mut sched).await;
+        }
+
+        for task_id in 0..5 {
+            assert_eq!(
+                get_task_status(flow_id, task_id).await.unwrap(),
+                TaskStatus::Finished
+            )
         }
     }
 }
