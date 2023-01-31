@@ -56,11 +56,12 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
                     "containers": [{
                         "name": task.name,
                         "image": "alpine:latest",
-                        "command": ["sleep", "0.5"],
+                        "command": task.cmd,
                     }],
                     "restartPolicy": "Never",
                 }
-            }
+            },
+            "backoffLimit": 0,
         }
     }))
     .unwrap();
@@ -112,6 +113,7 @@ fn phase_to_task_status(phase: String) -> TaskStatus {
         "Running" => TaskStatus::Running,
         "Succeeded" => TaskStatus::Finished,
         "Failed" => TaskStatus::Failed,
+        "StartError" => TaskStatus::Failed,
         _ => TaskStatus::Unknown,
     }
 }
@@ -191,14 +193,6 @@ async fn mark_running_tasks(
 
 #[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
-    // e2e test cases
-    // 1. happy
-    // 2. task failed
-    // 2. pod killed
-    // 3. cluster killed
-    // 4. db killed
-    // 5. duplicate pod
-
     for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
         match sched_pending_tasks(sched, flow_id).await {
             Ok(true) => continue,
@@ -220,6 +214,7 @@ mod tests {
     use std::time::Duration;
 
     use kube::api::DeleteParams;
+    use serial_test::serial;
 
     use super::*;
 
@@ -254,7 +249,7 @@ mod tests {
                     name: "task-e".to_string(),
                     image: "".to_string(),
                     depends: vec![],
-                    cmd: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -263,7 +258,7 @@ mod tests {
                     name: "task-b".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-d".to_string()],
-                    cmd: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -277,7 +272,7 @@ mod tests {
                         "task-d".to_string(),
                         "task-e".to_string(),
                     ],
-                    cmd: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -286,7 +281,7 @@ mod tests {
                     name: "task-d".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-e".to_string()],
-                    cmd: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -295,7 +290,7 @@ mod tests {
                     name: "task-c".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-d".to_string()],
-                    cmd: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -305,9 +300,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_schedule_and_run_tasks() {
-        delete_all_jobs().await;
         delete_all_pods().await;
+        delete_all_jobs().await;
 
         let mut sched = Scheduler { flow_runs: vec![] };
 
@@ -324,5 +320,74 @@ mod tests {
                 TaskStatus::Finished
             )
         }
+    }
+
+    fn test_flow_fail() -> ContainerDAGFlow {
+        ContainerDAGFlow {
+            name: "hello-world".to_owned(),
+            schedule: Some("".to_owned()),
+            tasks: vec![
+                Task {
+                    name: "task-one".to_string(),
+                    image: "".to_string(),
+                    depends: vec!["task-two".to_string()],
+                    cmd: vec!["exit".to_string(), "1".to_string()],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-zero".to_string(),
+                    image: "".to_string(),
+                    depends: vec!["task-one".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+                Task {
+                    name: "task-two".to_string(),
+                    image: "".to_string(),
+                    depends: vec![],
+                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    env: vec![],
+                    inputs: None,
+                    outputs: None,
+                },
+            ],
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_schedule_and_run_tasks_fail() {
+        delete_all_pods().await;
+        delete_all_jobs().await;
+
+        let mut sched = Scheduler { flow_runs: vec![] };
+
+        let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
+            .await
+            .unwrap();
+
+        for _ in 0..20 {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            schedule_and_run_tasks(&mut sched).await;
+        }
+
+        assert_eq!(
+            get_task_status(flow_id, 2).await.unwrap(),
+            TaskStatus::Finished
+        );
+
+        assert_eq!(
+            get_task_status(flow_id, 0).await.unwrap(),
+            TaskStatus::Failed
+        );
+
+        assert_eq!(
+            get_task_status(flow_id, 1).await,
+            Err(FlowError::UnexpectedRunnerStateError)
+        );
     }
 }
