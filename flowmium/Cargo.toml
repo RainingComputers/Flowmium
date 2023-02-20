@@ -27,6 +27,7 @@ k8s-openapi = { version = "0.17.0", features = ["v1_26"] }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+sqlx = {  version = "0.6", features = ["sqlite", "runtime-tokio-native-tls"] }
 
 [dev-dependencies]
 serial_test = "*"

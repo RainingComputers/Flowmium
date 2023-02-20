@@ -309,7 +309,7 @@ mod tests {
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
-        for _ in 0..30 {
+        for _ in 0..40 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
             schedule_and_run_tasks(&mut sched).await;
         }
@@ -370,7 +370,7 @@ mod tests {
             .await
             .unwrap();
 
-        for _ in 0..20 {
+        for _ in 0..30 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
             schedule_and_run_tasks(&mut sched).await;
         }
