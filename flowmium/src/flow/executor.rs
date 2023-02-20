@@ -249,7 +249,7 @@ mod tests {
                     name: "task-e".to_string(),
                     image: "".to_string(),
                     depends: vec![],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -258,7 +258,7 @@ mod tests {
                     name: "task-b".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-d".to_string()],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -272,7 +272,7 @@ mod tests {
                         "task-d".to_string(),
                         "task-e".to_string(),
                     ],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -281,7 +281,7 @@ mod tests {
                     name: "task-d".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-e".to_string()],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -290,7 +290,7 @@ mod tests {
                     name: "task-c".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-d".to_string()],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -309,7 +309,7 @@ mod tests {
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
-        for _ in 0..40 {
+        for _ in 0..30 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
             schedule_and_run_tasks(&mut sched).await;
         }
@@ -340,7 +340,7 @@ mod tests {
                     name: "task-zero".to_string(),
                     image: "".to_string(),
                     depends: vec!["task-one".to_string()],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -349,7 +349,7 @@ mod tests {
                     name: "task-two".to_string(),
                     image: "".to_string(),
                     depends: vec![],
-                    cmd: vec!["sleep".to_string(), "0.5".to_string()],
+                    cmd: vec!["sleep".to_string(), "0.01".to_string()],
                     env: vec![],
                     inputs: None,
                     outputs: None,
@@ -370,7 +370,7 @@ mod tests {
             .await
             .unwrap();
 
-        for _ in 0..30 {
+        for _ in 0..20 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
             schedule_and_run_tasks(&mut sched).await;
         }
