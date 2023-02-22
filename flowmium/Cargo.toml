@@ -28,6 +28,7 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 sqlx = {  version = "0.6", features = ["sqlite", "runtime-tokio-native-tls"] }
+rust-s3 = "0.32.3"
 
 [dev-dependencies]
 serial_test = "*"

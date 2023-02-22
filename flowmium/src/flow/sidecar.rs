@@ -1,7 +1,44 @@
-// TODO: function to download input artifacts
+use s3::Bucket;
+use std::fs;
 
-// TODO: function to wait for output artifacts
+use super::errors::FlowError;
 
-// TODO: function to upload output artifacts
+pub async fn download_input(
+    bucket: Bucket,
+    local_path: String,
+    store_path: String,
+) -> Result<(), FlowError> {
+    let Ok(response) = bucket.get_object(store_path).await else {
+        return Err(FlowError::UnableToDownloadInput);
+    };
 
-// TODO: function to read files and communicate with the main container
+    if response.status_code() != 200 {
+        return Err(FlowError::UnableToDownloadInput);
+    }
+
+    if let std::io::Result::Err(_) = fs::write(local_path, &response.bytes()) {
+        return Err(FlowError::UnableToWriteInput);
+    }
+
+    return Ok(());
+}
+
+pub async fn upload_output(
+    bucket: Bucket,
+    local_path: String,
+    store_path: String,
+) -> Result<(), FlowError> {
+    let Ok(content) = fs::read(local_path) else {
+        return Err(FlowError::UnableToReadOutput);
+    };
+
+    let Ok(response) = bucket.put_object(store_path, &content).await else {
+        return Err(FlowError::UnableToUploadArtifact);
+    };
+
+    if response.status_code() != 200 {
+        return Err(FlowError::UnableToSpawnTaskError);
+    }
+
+    return Ok(());
+}

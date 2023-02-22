@@ -12,6 +12,10 @@ pub enum FlowError {
     OutputDoesNotExistError,
     OutputNotFromParentError,
     OutputNotUniqueError,
+    UnableToUploadArtifact,
+    UnableToReadOutput,
+    UnableToDownloadInput,
+    UnableToWriteInput,
 }
 
 impl fmt::Display for FlowError {
