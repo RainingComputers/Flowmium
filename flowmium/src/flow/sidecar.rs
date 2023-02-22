@@ -1,5 +1,8 @@
 use s3::Bucket;
-use std::fs;
+
+use std::path::PathBuf;
+use std::time::Duration;
+use tokio::fs;
 
 use super::errors::FlowError;
 
@@ -16,7 +19,7 @@ pub async fn download_input(
         return Err(FlowError::UnableToDownloadInput);
     }
 
-    if let std::io::Result::Err(_) = fs::write(local_path, &response.bytes()) {
+    if let std::io::Result::Err(_) = fs::write(local_path, &response.bytes()).await {
         return Err(FlowError::UnableToWriteInput);
     }
 
@@ -28,7 +31,7 @@ pub async fn upload_output(
     local_path: String,
     store_path: String,
 ) -> Result<(), FlowError> {
-    let Ok(content) = fs::read(local_path) else {
+    let Ok(content) = fs::read(local_path).await else {
         return Err(FlowError::UnableToReadOutput);
     };
 
@@ -41,4 +44,18 @@ pub async fn upload_output(
     }
 
     return Ok(());
+}
+
+async fn wait_for_file(path: &PathBuf, timeout: Duration) -> bool {
+    let start_time = std::time::Instant::now();
+
+    while start_time.elapsed() < timeout {
+        if fs::metadata(path).await.is_ok() {
+            return true;
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    false
 }
