@@ -142,12 +142,44 @@ fn add_node_to_plan(
     plan.push(BTreeSet::from([node_id]));
 }
 
+pub fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowError> {
+    let mut output_task_name_map: BTreeMap<&String, usize> = BTreeMap::new();
+
+    for (task_id, task) in tasks.iter().enumerate() {
+        for outputs in &task.outputs {
+            for output in outputs {
+                if let Some(_) = output_task_name_map.insert(&output.name, task_id) {
+                    return Err(FlowError::OutputNotUniqueError);
+                }
+            }
+        }
+    }
+
+    for (task_id, task) in tasks.iter().enumerate() {
+        for inputs in &task.inputs {
+            for input in inputs {
+                let Some(from_task_id) = output_task_name_map.get(&input.from) else {
+                    return Err(FlowError::OutputDoesNotExistError);
+                };
+
+                if !nodes[task_id].children.contains(from_task_id) {
+                    return Err(FlowError::OutputNotFromParentError);
+                }
+            }
+        }
+    }
+
+    return Ok(());
+}
+
 pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, FlowError> {
     let nodes = construct_nodes(tasks)?;
 
     if is_cyclic(&nodes) {
         return Err(FlowError::CyclicDependenciesError);
     }
+
+    valid_input_outputs(tasks, &nodes)?;
 
     let mut plan: Vec<BTreeSet<usize>> = vec![];
 
@@ -160,6 +192,8 @@ pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, FlowErr
 
 #[cfg(test)]
 mod tests {
+    use crate::flow::model::{Input, Output};
+
     use super::*;
 
     #[test]
@@ -299,5 +333,152 @@ mod tests {
         ]);
 
         assert_eq!(plan, expected_plan);
+    }
+
+    #[test]
+    fn test_output_not_unique() {
+        let test_tasks = vec![
+            Task {
+                name: "A".to_string(),
+                image: "".to_string(),
+                depends: vec![],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![Output {
+                    name: "foo".to_string(),
+                    path: "/home/foo".to_string(),
+                }]),
+            },
+            Task {
+                name: "B".to_string(),
+                image: "".to_string(),
+                depends: vec!["A".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![Output {
+                    name: "bar".to_string(),
+                    path: "/home/bar".to_string(),
+                }]),
+            },
+            Task {
+                name: "C".to_string(),
+                image: "".to_string(),
+                depends: vec!["B".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![
+                    Output {
+                        name: "foo".to_string(),
+                        path: "/home/foo".to_string(),
+                    },
+                    Output {
+                        name: "alice".to_string(),
+                        path: "/home/alice".to_string(),
+                    },
+                ]),
+            },
+        ];
+
+        let actual = construct_plan(&test_tasks);
+
+        let expected = Err(FlowError::OutputNotUniqueError);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_output_does_not_exist() {
+        let test_tasks = vec![
+            Task {
+                name: "A".to_string(),
+                image: "".to_string(),
+                depends: vec![],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![Output {
+                    name: "foo".to_string(),
+                    path: "/home/foo".to_string(),
+                }]),
+            },
+            Task {
+                name: "B".to_string(),
+                image: "".to_string(),
+                depends: vec!["A".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: Some(vec![Input {
+                    from: "doesNotExist".to_string(),
+                    path: "/user/doesNotExist".to_string(),
+                }]),
+                outputs: Some(vec![Output {
+                    name: "bar".to_string(),
+                    path: "/home/bar".to_string(),
+                }]),
+            },
+        ];
+
+        let actual = construct_plan(&test_tasks);
+
+        let expected = Err(FlowError::OutputDoesNotExistError);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_output_not_from_parent() {
+        let test_tasks = vec![
+            Task {
+                name: "A".to_string(),
+                image: "".to_string(),
+                depends: vec![],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![Output {
+                    name: "foo".to_string(),
+                    path: "/home/foo".to_string(),
+                }]),
+            },
+            Task {
+                name: "B".to_string(),
+                image: "".to_string(),
+                depends: vec!["A".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: None,
+                outputs: Some(vec![Output {
+                    name: "bar".to_string(),
+                    path: "/home/bar".to_string(),
+                }]),
+            },
+            Task {
+                name: "C".to_string(),
+                image: "".to_string(),
+                depends: vec!["B".to_string()],
+                cmd: vec![],
+                env: vec![],
+                inputs: Some(vec![
+                    Input {
+                        from: "foo".to_string(),
+                        path: "/user/foo".to_string(),
+                    },
+                    Input {
+                        from: "bae".to_string(),
+                        path: "/user/bar".to_string(),
+                    },
+                ]),
+                outputs: Some(vec![Output {
+                    name: "alice".to_string(),
+                    path: "/home/alice".to_string(),
+                }]),
+            },
+        ];
+
+        let actual = construct_plan(&test_tasks);
+
+        let expected = Err(FlowError::OutputNotFromParentError);
+        assert_eq!(actual, expected);
     }
 }

@@ -9,6 +9,9 @@ pub enum FlowError {
     UnableToSpawnTaskError,
     UnableToConnectToKubernetesError,
     UnexpectedRunnerStateError,
+    OutputDoesNotExistError,
+    OutputNotFromParentError,
+    OutputNotUniqueError,
 }
 
 impl fmt::Display for FlowError {
