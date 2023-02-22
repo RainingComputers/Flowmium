@@ -166,3 +166,175 @@ impl Scheduler {
         return Ok(Some(tasks));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::flow::model::Task;
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    fn create_fake_task(task_name: &str) -> Task {
+        Task {
+            name: task_name.to_string(),
+            image: "".to_string(),
+            depends: vec![], // No need to fill because of forced fake plan
+            cmd: vec![],
+            env: vec![],
+            inputs: None,
+            outputs: None,
+        }
+    }
+
+    #[test]
+    fn test_scheduler() {
+        let test_tasks_0 = vec![
+            create_fake_task("flow-0-task-0"),
+            create_fake_task("flow-0-task-1"),
+            create_fake_task("flow-0-task-2"),
+            create_fake_task("flow-0-task-3"),
+        ];
+
+        let test_plan_0 = vec![
+            BTreeSet::from([0]),
+            BTreeSet::from([1, 2]),
+            BTreeSet::from([3]),
+        ];
+
+        let test_tasks_1 = vec![
+            create_fake_task("flow-1-task-0"),
+            create_fake_task("flow-1-task-1"),
+            create_fake_task("flow-1-task-2"),
+        ];
+
+        let test_plan_1 = vec![
+            BTreeSet::from([0]),
+            BTreeSet::from([1]),
+            BTreeSet::from([2]),
+        ];
+
+        let mut scheduler = Scheduler { flow_runs: vec![] };
+
+        let flow_id_0 = scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
+        let flow_id_1 = scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
+
+        assert_eq!(
+            scheduler.get_running_or_pending_flows(),
+            vec![
+                (flow_id_0, BTreeSet::from([])),
+                (flow_id_1, BTreeSet::from([]))
+            ],
+        );
+
+        assert_eq!(
+            scheduler.schedule_tasks(flow_id_0),
+            Ok(Some(vec![(0, create_fake_task("flow-0-task-0"))])),
+        );
+
+        scheduler.mark_task_running(0, 0).unwrap();
+
+        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+
+        scheduler.mark_task_finished(0, 0).unwrap();
+
+        assert_eq!(
+            scheduler.schedule_tasks(flow_id_0),
+            Ok(Some(vec![
+                (1, create_fake_task("flow-0-task-1")),
+                (2, create_fake_task("flow-0-task-2"))
+            ])),
+        );
+
+        scheduler.mark_task_running(0, 1).unwrap();
+        scheduler.mark_task_running(0, 2).unwrap();
+
+        assert_eq!(
+            scheduler.get_running_or_pending_flows(),
+            vec![
+                (flow_id_0, BTreeSet::from([1, 2])),
+                (flow_id_1, BTreeSet::from([]))
+            ],
+        );
+
+        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+
+        scheduler.mark_task_finished(0, 1).unwrap();
+        scheduler.mark_task_finished(0, 2).unwrap();
+
+        assert_eq!(
+            scheduler.schedule_tasks(flow_id_0),
+            Ok(Some(vec![(3, create_fake_task("flow-0-task-3")),])),
+        );
+
+        scheduler.mark_task_finished(0, 3).unwrap();
+
+        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+
+        assert_eq!(
+            scheduler.get_running_or_pending_flows(),
+            vec![(flow_id_1, BTreeSet::from([]))],
+        );
+
+        assert_eq!(
+            scheduler.schedule_tasks(flow_id_1),
+            Ok(Some(vec![(0, create_fake_task("flow-1-task-0"))])),
+        );
+
+        scheduler.mark_task_running(1, 0).unwrap();
+
+        assert_eq!(
+            scheduler.get_running_or_pending_flows(),
+            vec![(flow_id_1, BTreeSet::from([0]))],
+        );
+
+        assert_eq!(scheduler.schedule_tasks(flow_id_1), Ok(None));
+
+        scheduler.mark_task_failed(1, 0).unwrap();
+
+        assert_eq!(scheduler.schedule_tasks(flow_id_1), Ok(None));
+
+        assert_eq!(scheduler.get_running_or_pending_flows(), vec![]);
+    }
+
+    #[test]
+    fn test_scheduler_flow_does_not_exist() {
+        let test_tasks_0 = vec![
+            create_fake_task("flow-0-task-0"),
+            create_fake_task("flow-0-task-1"),
+        ];
+
+        let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+
+        let test_tasks_1 = vec![
+            create_fake_task("flow-1-task-0"),
+            create_fake_task("flow-1-task-1"),
+        ];
+
+        let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+
+        let mut scheduler = Scheduler { flow_runs: vec![] };
+
+        scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
+        scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
+
+        assert_eq!(
+            scheduler.mark_task_running(1000, 0),
+            Err(FlowError::FlowDoesNotExistError)
+        );
+
+        assert_eq!(
+            scheduler.mark_task_finished(1000, 0),
+            Err(FlowError::FlowDoesNotExistError)
+        );
+
+        assert_eq!(
+            scheduler.mark_task_failed(1000, 0),
+            Err(FlowError::FlowDoesNotExistError)
+        );
+
+        assert_eq!(
+            scheduler.schedule_tasks(1000),
+            Err(FlowError::FlowDoesNotExistError)
+        );
+    }
+}
