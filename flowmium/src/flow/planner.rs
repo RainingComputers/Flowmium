@@ -68,7 +68,7 @@ fn is_cyclic_visit(
     return false;
 }
 
-pub fn is_cyclic(nodes: &Vec<Node>) -> bool {
+fn is_cyclic(nodes: &Vec<Node>) -> bool {
     let mut discovered = BTreeSet::new();
     let mut finished = BTreeSet::new();
 
@@ -142,7 +142,7 @@ fn add_node_to_plan(
     plan.push(BTreeSet::from([node_id]));
 }
 
-pub fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowError> {
+fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowError> {
     let mut output_task_name_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (task_id, task) in tasks.iter().enumerate() {

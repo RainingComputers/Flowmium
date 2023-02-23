@@ -3,7 +3,7 @@ mod flow;
 use std::{process::ExitCode, time::Duration};
 
 use flow::{
-    executor::{instantiate_flow, schedule_and_run_tasks},
+    executor::{instantiate_flow, schedule_and_run_tasks, ExecutorConfig},
     model::{ContainerDAGFlow, Task},
     scheduler::Scheduler,
 };
@@ -76,6 +76,7 @@ async fn main() -> ExitCode {
         ],
     };
 
+    let config = ExecutorConfig::create_default_config();
     let mut sched = Scheduler { flow_runs: vec![] };
 
     match instantiate_flow(flow, &mut sched).await {
@@ -88,6 +89,6 @@ async fn main() -> ExitCode {
     loop {
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        schedule_and_run_tasks(&mut sched).await;
+        schedule_and_run_tasks(&mut sched, &config).await;
     }
 }
