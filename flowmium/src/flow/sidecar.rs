@@ -7,40 +7,63 @@ use tokio::fs;
 use super::errors::SidecarError;
 use super::model::{Input, Output};
 
+#[tracing::instrument(skip(bucket))]
 pub async fn download_input(
     bucket: &Bucket,
     local_path: String,
     store_path: String,
 ) -> Result<(), SidecarError> {
-    let Ok(response) = bucket.get_object(store_path).await else {
-        return Err(SidecarError::UnableToDownloadInput);
+    let response = match bucket.get_object(store_path).await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!("Could not download input because {}", error);
+            return Err(SidecarError::UnableToDownloadInput);
+        }
     };
 
     if response.status_code() != 200 {
+        tracing::error!(
+            "Response was non ok code {} while downloading input",
+            response.status_code()
+        );
         return Err(SidecarError::UnableToDownloadInput);
     }
 
-    if let std::io::Result::Err(_) = fs::write(local_path, &response.bytes()).await {
+    if let std::io::Result::Err(error) = fs::write(local_path, &response.bytes()).await {
+        tracing::error!(%error, "File error while downloading input");
         return Err(SidecarError::UnableToWriteInput);
     }
 
     return Ok(());
 }
 
+#[tracing::instrument(skip(bucket))]
 pub async fn upload_output(
     bucket: &Bucket,
     local_path: String,
     store_path: String,
 ) -> Result<(), SidecarError> {
-    let Ok(content) = fs::read(local_path).await else {
-        return Err(SidecarError::UnableToReadOutput);
+    let content = match fs::read(local_path).await {
+        Ok(content) => content,
+        Err(error) => {
+            tracing::error!(%error, "File error while uploading output");
+            return Err(SidecarError::UnableToReadOutput);
+        }
     };
 
-    let Ok(response) = bucket.put_object(store_path, &content).await else {
-        return Err(SidecarError::UnableToUploadArtifact);
+    let response = match bucket.put_object(store_path, &content).await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!("Could not upload output because {}", error);
+            return Err(SidecarError::UnableToUploadArtifact);
+        }
     };
 
     if response.status_code() != 200 {
+        tracing::error!(
+            "Response was non ok code {} while uploading output",
+            response.status_code()
+        );
         return Err(SidecarError::UnableToUploadArtifact);
     }
 
@@ -72,8 +95,6 @@ async fn download_all_inputs(
 ) -> Result<(), SidecarError> {
     for input in inputs {
         let store_path = get_store_path(flow_id, &input.from);
-
-        // TODO: Log on error
         download_input(&bucket, input.path, store_path).await?;
     }
 
@@ -87,8 +108,6 @@ async fn upload_all_output(
 ) -> Result<(), SidecarError> {
     for output in outputs {
         let store_path = get_store_path(flow_id, &output.name);
-
-        // TODO: Log on error
         upload_output(&bucket, output.path, store_path).await?;
     }
 
