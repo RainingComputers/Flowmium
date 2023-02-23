@@ -29,6 +29,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 sqlx = {  version = "0.6", features = ["sqlite", "runtime-tokio-native-tls"] }
 rust-s3 = "0.32.3"
+gumdrop = "0.8.1"
 
 [dev-dependencies]
 serial_test = "*"
