@@ -19,6 +19,23 @@ enum TaskStatus {
     Unknown,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct ExecutorConfig {
+    namespace: String,
+    flow_id_label: String,
+    task_id_label: String,
+}
+
+impl ExecutorConfig {
+    pub fn create_default_config() -> ExecutorConfig {
+        ExecutorConfig {
+            namespace: "default".to_owned(),
+            flow_id_label: "flowmium.io/flow-id".to_owned(),
+            task_id_label: "flowmium.io/task-id".to_owned(),
+        }
+    }
+}
+
 async fn get_kubernetes_client() -> Result<Client, FlowError> {
     match Client::try_default().await {
         Ok(client) => Ok(client),
@@ -29,8 +46,13 @@ async fn get_kubernetes_client() -> Result<Client, FlowError> {
     }
 }
 
-#[tracing::instrument]
-async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, FlowError> {
+#[tracing::instrument(skip(config))]
+async fn spawn_task(
+    flow_id: usize,
+    task_id: usize,
+    task: &Task,
+    config: &ExecutorConfig,
+) -> Result<Job, FlowError> {
     tracing::info!("Spawning task");
 
     let client = get_kubernetes_client().await?;
@@ -48,8 +70,8 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
                 "metadata": {
                     "name": task.name,
                     "labels": {
-                        "flowmium.io/flow-id": flow_id.to_string(),
-                        "flowmium.io/task-id": task_id.to_string()
+                        &config.flow_id_label: flow_id.to_string(),
+                        &config.task_id_label: task_id.to_string()
                     }
                 },
                 "spec": {
@@ -75,15 +97,19 @@ async fn spawn_task(flow_id: usize, task_id: usize, task: &Task) -> Result<Job, 
     }
 }
 
-#[tracing::instrument]
-async fn list_pods(flow_id: usize, task_id: usize) -> Result<ObjectList<Pod>, FlowError> {
+#[tracing::instrument(skip(config))]
+async fn list_pods(
+    flow_id: usize,
+    task_id: usize,
+    config: &ExecutorConfig,
+) -> Result<ObjectList<Pod>, FlowError> {
     let client = get_kubernetes_client().await?;
 
-    let pods_api: Api<Pod> = Api::namespaced(client, "default"); // TODO: Env variable for namespace
+    let pods_api: Api<Pod> = Api::namespaced(client, &config.namespace);
 
     let label_selector = format!(
-        "flowmium.io/flow-id={},flowmium.io/task-id={}",
-        flow_id, task_id
+        "{}={},{}={}",
+        config.flow_id_label, flow_id, config.task_id_label, task_id
     );
 
     let mut list_params = ListParams::default();
@@ -118,9 +144,13 @@ fn phase_to_task_status(phase: String) -> TaskStatus {
     }
 }
 
-#[tracing::instrument]
-async fn get_task_status(flow_id: usize, task_id: usize) -> Result<TaskStatus, FlowError> {
-    let pod_list = list_pods(flow_id, task_id).await?;
+#[tracing::instrument(skip(config))]
+async fn get_task_status(
+    flow_id: usize,
+    task_id: usize,
+    config: &ExecutorConfig,
+) -> Result<TaskStatus, FlowError> {
+    let pod_list = list_pods(flow_id, task_id, config).await?;
     let mut pod_iter = pod_list.iter();
 
     let Some(pod) = pod_iter.next() else {
@@ -155,13 +185,17 @@ pub async fn instantiate_flow(
     return Ok(flow_id);
 }
 
-#[tracing::instrument(skip(sched))]
-async fn sched_pending_tasks(sched: &mut Scheduler, flow_id: usize) -> Result<bool, FlowError> {
+#[tracing::instrument(skip(sched, config))]
+async fn sched_pending_tasks(
+    sched: &mut Scheduler,
+    flow_id: usize,
+    config: &ExecutorConfig,
+) -> Result<bool, FlowError> {
     let option_tasks = sched.schedule_tasks(flow_id)?;
 
     if let Some(tasks) = option_tasks {
         for (task_id, task) in tasks {
-            match spawn_task(flow_id, task_id, &task).await {
+            match spawn_task(flow_id, task_id, &task, &config).await {
                 Ok(_) => sched.mark_task_running(flow_id, task_id)?,
                 Err(_) => break,
             }
@@ -173,13 +207,14 @@ async fn sched_pending_tasks(sched: &mut Scheduler, flow_id: usize) -> Result<bo
     return Ok(false);
 }
 
-#[tracing::instrument(skip(sched))]
+#[tracing::instrument(skip(sched, config))]
 async fn mark_running_tasks(
     sched: &mut Scheduler,
     flow_id: usize,
     task_id: usize,
+    config: &ExecutorConfig,
 ) -> Result<(), FlowError> {
-    let status = match get_task_status(flow_id, task_id).await {
+    let status = match get_task_status(flow_id, task_id, config).await {
         Ok(status) => status,
         Err(_) => return sched.mark_task_failed(flow_id, task_id),
     };
@@ -192,16 +227,16 @@ async fn mark_running_tasks(
 }
 
 #[tracing::instrument(skip(sched))]
-pub async fn schedule_and_run_tasks(sched: &mut Scheduler) {
+pub async fn schedule_and_run_tasks(sched: &mut Scheduler, config: &ExecutorConfig) {
     for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
-        match sched_pending_tasks(sched, flow_id).await {
+        match sched_pending_tasks(sched, flow_id, &config).await {
             Ok(true) => continue,
             Ok(false) => (),
             Err(_) => break,
         }
 
         for task_id in running_tasks {
-            if let Err(_) = mark_running_tasks(sched, flow_id, task_id).await {
+            if let Err(_) = mark_running_tasks(sched, flow_id, task_id, &config).await {
                 break;
             };
         }
@@ -305,18 +340,19 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
+        let config = ExecutorConfig::create_default_config();
         let mut sched = Scheduler { flow_runs: vec![] };
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
         for _ in 0..30 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&mut sched).await;
+            schedule_and_run_tasks(&mut sched, &config).await;
         }
 
         for task_id in 0..5 {
             assert_eq!(
-                get_task_status(flow_id, task_id).await.unwrap(),
+                get_task_status(flow_id, task_id, &config).await.unwrap(),
                 TaskStatus::Finished
             )
         }
@@ -364,6 +400,7 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
+        let config = ExecutorConfig::create_default_config();
         let mut sched = Scheduler { flow_runs: vec![] };
 
         let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
@@ -372,21 +409,21 @@ mod tests {
 
         for _ in 0..20 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&mut sched).await;
+            schedule_and_run_tasks(&mut sched, &config).await;
         }
 
         assert_eq!(
-            get_task_status(flow_id, 2).await.unwrap(),
+            get_task_status(flow_id, 2, &config).await.unwrap(),
             TaskStatus::Finished
         );
 
         assert_eq!(
-            get_task_status(flow_id, 0).await.unwrap(),
+            get_task_status(flow_id, 0, &config).await.unwrap(),
             TaskStatus::Failed
         );
 
         assert_eq!(
-            get_task_status(flow_id, 1).await,
+            get_task_status(flow_id, 1, &config).await,
             Err(FlowError::UnexpectedRunnerStateError)
         );
     }
