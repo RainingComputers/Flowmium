@@ -1,4 +1,5 @@
 mod flow;
+mod artefacts;
 
 use std::{process::ExitCode, time::Duration};
 

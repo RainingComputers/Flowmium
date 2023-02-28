@@ -1,3 +1,13 @@
 {
-    "cSpell.words": ["backoff", "dependee", "flowmium", "openapi", "peekable", "sched", "sqlx"]
+    "cSpell.words": [
+        "backoff",
+        "creds",
+        "dependee",
+        "flowmium",
+        "openapi",
+        "peekable",
+        "sched",
+        "sqlx",
+        "timedout"
+    ]
 }
