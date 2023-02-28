@@ -15,6 +15,8 @@ pub enum Command {
     Sidecar(SidecarOpts),
     #[options(help = "Run flowmium main container")]
     Main(MainOpts),
+    #[options(help = "Execute DAG flows")]
+    Execute(ExecuteOpts),
 }
 
 #[derive(Debug, Options)]
@@ -31,4 +33,10 @@ pub struct SidecarOpts {
 pub struct MainOpts {
     #[options(help = "Command for main container")]
     pub cmd: Vec<String>,
+}
+
+#[derive(Debug, Options)]
+pub struct ExecuteOpts {
+    #[options(help = "List of DAG flow definition")]
+    pub files: Vec<String>,
 }
