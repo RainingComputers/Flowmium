@@ -1,6 +1,8 @@
 version: "3"
 services:
-  server:
+  kubernetes:
+    networks:
+      - testnet
     image: "rancher/k3s:${K3S_VERSION:-latest}"
     command:
       - server
@@ -14,5 +16,15 @@ services:
       - K3S_KUBECONFIG_MODE=666
     volumes:
       - .:/output
+      - ./test-registries.yaml:/etc/rancher/k3s/registries.yaml
     ports:
       - 6443:6443
+  registry:
+    networks:
+      - testnet
+    image: registry:latest
+    ports:
+      - 5000:5000
+networks:
+  testnet:
+    driver: bridge
