@@ -68,8 +68,8 @@ async fn main() -> ExitCode {
     };
 
     match opt {
-        args::Command::Sidecar(sidecarOpts) => ExitCode::FAILURE,
-        args::Command::Main(mainOpts) => ExitCode::FAILURE,
-        args::Command::Execute(executeOpts) => execute_main(executeOpts).await,
+        args::Command::Sidecar(sidecar_opts) => ExitCode::FAILURE,
+        args::Command::Main(main_opts) => ExitCode::FAILURE,
+        args::Command::Execute(execute_opts) => execute_main(execute_opts).await,
     }
 }

@@ -2,7 +2,8 @@ version: "3"
 services:
   kubernetes:
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.16.238.2
     image: "rancher/k3s:${K3S_VERSION:-latest}"
     command:
       - server
@@ -21,10 +22,26 @@ services:
       - 6443:6443
   registry:
     networks:
-      - testnet
+      testnet:
+        ipv4_address: 172.16.238.3
     image: registry:latest
     ports:
       - 5000:5000
+  minio:
+    networks:
+      testnet:
+        ipv4_address: 172.16.238.4
+    command: server /data --console-address ":9001"
+    image: minio/minio:latest
+    environment:
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=password
+    ports:
+      - 9000:9000
+      - 9001:9001    
 networks:
   testnet:
-    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.16.238.0/24"
