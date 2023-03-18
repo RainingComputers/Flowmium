@@ -79,6 +79,7 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     }
 
     // TODO: Add timeout
+    // TODO: Print logs to console
     let task_output = match Command::new(&cmd[0]).args(&cmd[1..]).output() {
         Ok(task_output) => task_output,
         Err(error) => {
