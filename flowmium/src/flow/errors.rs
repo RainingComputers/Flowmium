@@ -10,4 +10,5 @@ pub enum FlowError {
     OutputDoesNotExistError,
     OutputNotFromParentError,
     OutputNotUniqueError,
+    InvalidTaskDefinition,
 }

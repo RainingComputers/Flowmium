@@ -2,22 +2,34 @@ mod args;
 mod artefacts;
 mod flow;
 
+use artefacts::{
+    init::do_init,
+    task::{run_task, SidecarConfig},
+};
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
-use args::{ExecuteOpts, FlowmiumOptions, SidecarOpts};
+use args::{ExecuteOpts, FlowmiumOptions, TaskOpts};
 use flow::{
-    executor::{instantiate_flow, schedule_and_run_tasks, ExecutorConfig},
-    model::{ContainerDAGFlow, Task},
+    executor::{instantiate_flow, schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
+    model::ContainerDAGFlow,
     scheduler::Scheduler,
 };
 use gumdrop::Options;
 
-async fn execute_main(executeOpts: ExecuteOpts) -> ExitCode {
-    let config = ExecutorConfig::create_default_config();
+async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
+    let config: TaskPodConfig = match envy::from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::error!(%error, "Invalid env config for executor");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let executor_config = ExecutorConfig::create_default_config(config);
     let mut sched = Scheduler { flow_runs: vec![] };
 
-    for dag_file_path in executeOpts.files.iter() {
+    for dag_file_path in execute_opts.files.iter() {
         let contents = match fs::read_to_string(dag_file_path).await {
             Ok(contents) => contents,
             Err(error) => {
@@ -45,8 +57,20 @@ async fn execute_main(executeOpts: ExecuteOpts) -> ExitCode {
     loop {
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        schedule_and_run_tasks(&mut sched, &config).await;
+        schedule_and_run_tasks(&mut sched, &executor_config).await;
     }
+}
+
+async fn task_main(taks_opts: TaskOpts) -> ExitCode {
+    let config: SidecarConfig = match envy::from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::error!(%error, "Invalid env config for task");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    return run_task(config, taks_opts.cmd).await;
 }
 
 #[tokio::main]
@@ -60,7 +84,16 @@ async fn main() -> ExitCode {
         }
     };
 
-    let opts = FlowmiumOptions::parse_args_default_or_exit();
+    let args: Vec<String> = std::env::args().collect();
+
+    let opts = match FlowmiumOptions::parse_args(&args[1..], gumdrop::ParsingStyle::StopAtFirstFree)
+    {
+        Ok(opts) => opts,
+        Err(error) => {
+            print!("{}", error);
+            return ExitCode::FAILURE;
+        }
+    };
 
     let Some(opt) = opts.command else {
         eprint!("Invalid sub command");
@@ -68,8 +101,8 @@ async fn main() -> ExitCode {
     };
 
     match opt {
-        args::Command::Sidecar(sidecar_opts) => ExitCode::FAILURE,
-        args::Command::Main(main_opts) => ExitCode::FAILURE,
+        args::Command::Init(init_opts) => do_init(init_opts.src, init_opts.dest).await,
+        args::Command::Task(task_opts) => task_main(task_opts).await,
         args::Command::Execute(execute_opts) => execute_main(execute_opts).await,
     }
 }

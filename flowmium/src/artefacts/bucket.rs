@@ -40,6 +40,8 @@ pub async fn download_input(
     local_path: String,
     store_path: String,
 ) -> Result<(), ArtefactError> {
+    tracing::info!("Downloading input");
+
     let response = match bucket.get_object(store_path).await {
         Ok(response) => response,
         Err(error) => {
@@ -70,6 +72,8 @@ pub async fn upload_output(
     local_path: String,
     store_path: String,
 ) -> Result<(), ArtefactError> {
+    tracing::info!("Uploading output");
+
     let content = match fs::read(local_path).await {
         Ok(content) => content,
         Err(error) => {

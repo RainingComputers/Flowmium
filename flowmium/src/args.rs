@@ -11,32 +11,33 @@ pub struct FlowmiumOptions {
 
 #[derive(Debug, Options)]
 pub enum Command {
-    #[options(help = "Run flowmium sidecar container")]
-    Sidecar(SidecarOpts),
-    #[options(help = "Run flowmium main container")]
-    Main(MainOpts),
+    #[options(help = "Run flowmium main")]
+    Init(InitOpts),
+    #[options(help = "Run flowmium task")]
+    Task(TaskOpts),
     #[options(help = "Execute DAG flows")]
     Execute(ExecuteOpts),
 }
 
 #[derive(Debug, Options)]
-pub struct SidecarOpts {
-    #[options(help = "Launch init sidecar which will download all required inputs")]
-    pub init: bool,
-    #[options(
-        help = "Launch main sidecar which will wait for main container and upload all outputs"
-    )]
-    pub wait: bool,
-}
-
-#[derive(Debug, Options)]
-pub struct MainOpts {
-    #[options(help = "Command for main container")]
+pub struct TaskOpts {
+    #[options(free, help = "Command for task")]
     pub cmd: Vec<String>,
 }
 
 #[derive(Debug, Options)]
+pub struct InitOpts {
+    #[options(free, help = "Path to flowmium executable in the container")]
+    pub src: String,
+    #[options(
+        free,
+        help = "Destination path of the volume to copy the executable to"
+    )]
+    pub dest: String,
+}
+
+#[derive(Debug, Options)]
 pub struct ExecuteOpts {
-    #[options(help = "List of DAG flow definition")]
+    #[options(free, help = "List of DAG flow definition")]
     pub files: Vec<String>,
 }
