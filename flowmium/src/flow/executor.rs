@@ -563,37 +563,37 @@ mod tests {
         }
     }
 
-    // #[tokio::test]
-    // #[serial]
-    // async fn test_schedule_and_run_tasks_fail() {
-    //     delete_all_pods().await;
-    //     delete_all_jobs().await;
+    #[tokio::test]
+    #[serial]
+    async fn test_schedule_and_run_tasks_fail() {
+        delete_all_pods().await;
+        delete_all_jobs().await;
 
-    //     let config = ExecutorConfig::create_default_config(test_pod_config());
-    //     let mut sched = Scheduler { flow_runs: vec![] };
+        let config = ExecutorConfig::create_default_config(test_pod_config());
+        let mut sched = Scheduler { flow_runs: vec![] };
 
-    //     let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
-    //         .await
-    //         .unwrap();
+        let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
+            .await
+            .unwrap();
 
-    //     for _ in 0..30 {
-    //         tokio::time::sleep(Duration::from_millis(1000)).await;
-    //         schedule_and_run_tasks(&mut sched, &config).await;
-    //     }
+        for _ in 0..30 {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            schedule_and_run_tasks(&mut sched, &config).await;
+        }
 
-    //     assert_eq!(
-    //         get_task_status(flow_id, 2, &config).await.unwrap(),
-    //         TaskStatus::Finished
-    //     );
+        assert_eq!(
+            get_task_status(flow_id, 2, &config).await.unwrap(),
+            TaskStatus::Finished
+        );
 
-    //     assert_eq!(
-    //         get_task_status(flow_id, 0, &config).await.unwrap(),
-    //         TaskStatus::Failed
-    //     );
+        assert_eq!(
+            get_task_status(flow_id, 0, &config).await.unwrap(),
+            TaskStatus::Failed
+        );
 
-    //     assert_eq!(
-    //         get_task_status(flow_id, 1, &config).await,
-    //         Err(FlowError::UnexpectedRunnerStateError)
-    //     );
-    // }
+        assert_eq!(
+            get_task_status(flow_id, 1, &config).await,
+            Err(FlowError::UnexpectedRunnerStateError)
+        );
+    }
 }
