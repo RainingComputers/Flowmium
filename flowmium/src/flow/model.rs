@@ -24,7 +24,6 @@ pub struct SecretRef {
 #[serde(untagged)]
 pub enum EnvVar {
     KeyValuePair(KeyValuePair),
-    InputRef(InputRef),
     SecretRef(SecretRef),
 }
 
@@ -116,9 +115,9 @@ mod tests {
                         name: "ENV_VAR_ONE".to_owned(),
                         value: "foobar".to_owned(),
                     }),
-                    EnvVar::InputRef(InputRef {
+                    EnvVar::SecretRef(SecretRef {
                         name: "ENV_VAR_TWO".to_owned(),
-                        from_input: "some-other-input".to_owned(),
+                        from_secret: "some-secret".to_owned(),
                     }),
                     EnvVar::SecretRef(SecretRef {
                         name: "ENV_VAR_THREE".to_owned(),
