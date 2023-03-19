@@ -89,7 +89,7 @@ mod tests {
               - name: "ENV_VAR_ONE"
                 value: "foobar"
               - name: "ENV_VAR_TWO"
-                fromInput: "some-other-input"
+                fromSecret: "some-secret"
               - name: "ENV_VAR_THREE"
                 fromSecret: "this-is-some-secret"
             inputs:
