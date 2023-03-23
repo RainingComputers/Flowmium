@@ -51,6 +51,9 @@ class Flow:
         )
 
     def task(self, inputs: dict[str, Callable] = {}) -> Callable:
+        # TODO: Choose default serailize and add a way to override the serializer
+        # TODO: Add flowctx context
+
         def task_decorator(task_func: Callable) -> Callable:
             task_output = Output(
                 name=Flow.OUTPUT_NAME_TEMPLATE.format(task_func.__name__),
@@ -77,13 +80,13 @@ class Flow:
         return task_decorator
 
     def run_task(self, task_def: Task) -> None:
-        # Deserialize inputs from file into memory
-
-        # Run the function
-
-        # Serailize the output to file
+        # TODO: Deserialize inputs from file into memory
+        # TODO: Run the function
+        # TODO: Serailize the output to file
 
         pass
 
     def print_dag_def(self) -> None:
+        # TODO: Run checks
+
         print(self.tasks)
