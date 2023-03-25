@@ -17,8 +17,9 @@ use flow::{
 };
 use gumdrop::Options;
 
+#[tracing::instrument]
 async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
-    let config: TaskPodConfig = match envy::from_env() {
+    let config: TaskPodConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%error, "Invalid env config for executor");
@@ -48,8 +49,9 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
 
         match instantiate_flow(flow, &mut sched).await {
             Ok(_) => (),
-            Err(_) => {
-                return ExitCode::FAILURE;
+            Err(error) => {
+                tracing::error!(%error, "Error instantiating flow");
+                tracing::warn!("Skipping flow file {}", dag_file_path);
             }
         };
     }
@@ -61,8 +63,9 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
     }
 }
 
+#[tracing::instrument]
 async fn task_main(taks_opts: TaskOpts) -> ExitCode {
-    let config: SidecarConfig = match envy::from_env() {
+    let config: SidecarConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%error, "Invalid env config for task");

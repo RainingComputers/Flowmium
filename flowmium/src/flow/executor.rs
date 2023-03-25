@@ -1,5 +1,8 @@
 use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
+use super::model::EnvVar;
+use super::model::KeyValuePair;
+use super::model::SecretRef;
 use super::model::Task;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
@@ -26,7 +29,7 @@ pub struct TaskPodConfig {
     bucket_name: String,
     access_key: String,
     secret_key: String,
-    flowmium_image: String,
+    executor_image: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -63,6 +66,56 @@ fn get_task_cmd(task: &Task) -> Vec<&str> {
     task_cmd.extend(task.cmd.iter().map(|elem| &elem[..]));
 
     return task_cmd;
+}
+
+fn get_task_envs<'a>(
+    task: &'a Task,
+    input_json: String,
+    output_json: String,
+    flow_id: usize,
+    config: &'a ExecutorConfig,
+) -> Vec<serde_json::Value> {
+    let mut task_envs: Vec<serde_json::Value> = vec![
+        serde_json::json! ({
+            "name": "FLOWMIUM_INPUT_JSON",
+            "value": input_json,
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_OUTPUT_JSON",
+            "value": output_json,
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_FLOW_ID",
+            "value": flow_id.to_string(),
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_ACCESS_KEY",
+            "value": config.pod_config.access_key,
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_SECRET_KEY",
+            "value": config.pod_config.secret_key,
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_BUCKET_NAME",
+            "value": config.pod_config.bucket_name,
+        }),
+        serde_json::json!( {
+            "name": "FLOWMIUM_STORE_URL",
+            "value": config.pod_config.store_url,
+        }),
+    ];
+
+    task_envs.extend(task.env.iter().map(|env| match env {
+        EnvVar::KeyValuePair(KeyValuePair { name, value }) => {
+            serde_json::json! ({"name": name, "value": value})
+        }
+        EnvVar::SecretRef(SecretRef { name, from_secret }) => {
+            serde_json::json! ({"name": name, "value": from_secret}) // TODO: Actually fetch secret
+        }
+    }));
+
+    return task_envs;
 }
 
 #[tracing::instrument(skip(config))]
@@ -113,7 +166,7 @@ async fn spawn_task(
                     "initContainers": [
                         {
                             "name": "init",
-                            "image": &config.pod_config.flowmium_image,
+                            "image": &config.pod_config.executor_image,
                             "command": ["/flowmium", "init", "/flowmium", "/var/run/flowmium"],
                             "volumeMounts": [
                                 {
@@ -127,36 +180,7 @@ async fn spawn_task(
                         "name": task.name,
                         "image": task.image,
                         "command": get_task_cmd(&task),
-                        "env": [
-                            {
-                                "name": "INPUT_JSON",
-                                "value": input_json
-                            },
-                            {
-                                "name": "OUTPUT_JSON",
-                                "value": output_json,
-                              },
-                            {
-                                "name": "FLOW_ID",
-                                "value": flow_id.to_string(),
-                            },
-                            {
-                                "name": "ACCESS_KEY",
-                                "value": config.pod_config.access_key,
-                            },
-                            {
-                                "name": "SECRET_KEY",
-                                "value": config.pod_config.secret_key,
-                            },
-                            {
-                                "name": "BUCKET_NAME",
-                                "value": config.pod_config.bucket_name,
-                            },
-                            {
-                                "name": "STORE_URL",
-                                "value": config.pod_config.store_url,
-                            }
-                        ],
+                        "env": get_task_envs(task, input_json, output_json, flow_id, config),
                         "volumeMounts": [
                             {
                                 "name": "executable",
@@ -353,7 +377,7 @@ mod tests {
             bucket_name: "flowmium-test".to_owned(),
             access_key: "minio".to_owned(),
             secret_key: "password".to_owned(),
-            flowmium_image: "registry:5000/flowmium-debug".to_owned(),
+            executor_image: "registry:5000/flowmium-debug".to_owned(),
         }
     }
 

@@ -1,2 +1,5 @@
 .venv/
-test.py
+test.json
+task-output/
+task-inputs/
+**/__pycache__/**
