@@ -29,6 +29,12 @@ class Task:
     func: Callable
     inputs: list[Input]
     output: Output
+    requires_flowctx: bool
+
+
+@dataclass
+class FlowContext:
+    task_id: int
 
 
 @dataclass
@@ -84,8 +90,6 @@ class Flow:
             dump=default_serialize.dump, load=default_serialize.load
         ),
     ) -> Callable:
-        # TODO: Add flowctx context
-
         def task_decorator(task_func: Callable) -> Callable:
             task_name = Flow._get_task_name(task_func)
             self.serializers[task_name] = serializer
@@ -97,9 +101,12 @@ class Flow:
             )
 
             arg_names_list = inspect.getfullargspec(task_func).args
+            arg_names_list_no_flowctx = list(
+                filter(lambda item: item != "flowctx", arg_names_list)
+            )
 
             task_inputs = [
-                self._parse_inputs_dict_tuple(arg_names_list, item)
+                self._parse_inputs_dict_tuple(arg_names_list_no_flowctx, item)
                 for item in inputs.items()
             ]
 
@@ -108,6 +115,7 @@ class Flow:
                 func=task_func,
                 inputs=task_inputs,
                 output=task_output,
+                requires_flowctx="flowctx" in arg_names_list,
             )
 
             self.tasks.append(task_def)
@@ -116,12 +124,15 @@ class Flow:
 
         return task_decorator
 
-    def run_task(self, task_id: int) -> None:
-        task_def = self.tasks[task_id]
+    def run_task(self, flowctx: FlowContext) -> None:
+        task_def = self.tasks[flowctx.task_id]
 
         args_dict = dict(
             [(inp.arg_name, inp.load(inp.path)) for inp in task_def.inputs]
         )
+
+        if task_def.requires_flowctx:
+            args_dict["flowctx"] = flowctx
 
         task_output = task_def.func(**args_dict)
 
@@ -129,33 +140,43 @@ class Flow:
             task_def.output.dump(task_output, task_def.output.path)
 
     def get_dag_dict(self, image: str, cmd: list[str]) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "tasks": [
+        tasks: list[dict[str, Any]] = []
+
+        for task_id, task in enumerate(self.tasks):
+            tasks.append(
                 {
                     "name": task.name,
                     "image": image,
                     "depends": [inp.depends for inp in task.inputs],
                     "cmd": cmd,
                     "env": [
-                        {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": f"{task_id}"},
+                        {
+                            "name": "FLOWMIUM_FRAMEWORK_TASK_ID",
+                            "value": f"{task_id}",
+                        },
                     ],
                     "inputs": [
                         {"from": inp.frm, "path": inp.path} for inp in task.inputs
                     ],
                     "outputs": [{"name": task.output.name, "path": task.output.path}],
                 }
-                for task_id, task in enumerate(self.tasks)
-            ],
+            )
+
+        return {
+            "name": self.name,
+            "tasks": tasks,
         }
 
     def run(self) -> None:
         try:
-            task_id = int(os.environ["FLOWMIUM_FRAMEWORK_TASK_ID"])
-            self.run_task(task_id)
+            flowctx = FlowContext(
+                task_id=int(os.environ["FLOWMIUM_FRAMEWORK_TASK_ID"]),
+            )
+
+            self.run_task(flowctx)
         except KeyError:
             parser = argparse.ArgumentParser()
-            parser.add_argument("--cmd", required=True, type=list[str])
+            parser.add_argument("--cmd", required=True, type=str, nargs="+")
             parser.add_argument("--image", required=True, type=str)
             args = parser.parse_args()
 

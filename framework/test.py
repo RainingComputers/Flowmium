@@ -1,4 +1,4 @@
-from flowmium import Flow
+from flowmium import Flow, FlowContext
 
 
 flow = Flow("testing")
@@ -10,8 +10,8 @@ def foo() -> str:
 
 
 @flow.task({"input_str": foo})
-def replace_letter_a(input_str: str) -> str:
-    return input_str.replace("a", "e")
+def replace_letter_a(input_str: str, flowctx: FlowContext) -> str:
+    return input_str.replace("a", "e") + str(flowctx.task_id)
 
 
 @flow.task({"input_str": foo})
