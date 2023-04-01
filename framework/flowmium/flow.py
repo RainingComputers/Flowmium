@@ -83,6 +83,15 @@ class Flow:
             load=self.serializers[input_task_name].load,
         )
 
+    @staticmethod
+    def _get_arg_names_list(task_func: Callable) -> tuple[list[str], bool]:
+        arg_names_list = inspect.getfullargspec(task_func).args
+        arg_names_list_no_flowctx = list(
+            filter(lambda item: item != "flowctx", arg_names_list)
+        )
+
+        return arg_names_list_no_flowctx, "flowctx" in arg_names_list
+
     def task(
         self,
         inputs: dict[str, Callable] = {},
@@ -100,13 +109,12 @@ class Flow:
                 dump=serializer.dump,
             )
 
-            arg_names_list = inspect.getfullargspec(task_func).args
-            arg_names_list_no_flowctx = list(
-                filter(lambda item: item != "flowctx", arg_names_list)
+            arg_names_list, requires_flowctx = Flow._get_arg_names_list(
+                task_func=task_func
             )
 
             task_inputs = [
-                self._parse_inputs_dict_tuple(arg_names_list_no_flowctx, item)
+                self._parse_inputs_dict_tuple(arg_names_list, item)
                 for item in inputs.items()
             ]
 
@@ -115,7 +123,7 @@ class Flow:
                 func=task_func,
                 inputs=task_inputs,
                 output=task_output,
-                requires_flowctx="flowctx" in arg_names_list,
+                requires_flowctx=requires_flowctx,
             )
 
             self.tasks.append(task_def)
