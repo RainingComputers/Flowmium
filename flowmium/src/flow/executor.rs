@@ -307,7 +307,7 @@ async fn sched_pending_tasks(
     flow_id: usize,
     config: &ExecutorConfig,
 ) -> Result<bool, FlowError> {
-    let option_tasks = sched.schedule_tasks(flow_id)?;
+    let option_tasks = sched.schedule_tasks(flow_id).await?;
 
     if let Some(tasks) = option_tasks {
         for (task_id, task) in tasks {
@@ -366,6 +366,7 @@ mod tests {
 
     use kube::api::DeleteParams;
     use serial_test::serial;
+    use sqlx::postgres::PgPoolOptions;
 
     use crate::flow::model::{Input, Output};
 
@@ -533,8 +534,18 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
+        // TODO: Clean DB code
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler { flow_runs: vec![] };
+        let mut sched = Scheduler {
+            flow_runs: vec![],
+            pool,
+        };
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
@@ -593,8 +604,18 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
+        // TODO: Clean DB code
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler { flow_runs: vec![] };
+        let mut sched = Scheduler {
+            flow_runs: vec![],
+            pool,
+        };
 
         let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
             .await

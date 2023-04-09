@@ -39,6 +39,16 @@ services:
     ports:
       - 9000:9000
       - 9001:9001    
+  postgres:
+    image: postgres:latest
+    restart: always
+    environment:
+      - DATABASE_HOST=127.0.0.1
+      - POSTGRES_USER=flowmium
+      - POSTGRES_PASSWORD=flowmium
+      - POSTGRES_DB=flowmium
+    ports:
+      - '5432:5432'
 networks:
   testnet:
     ipam:

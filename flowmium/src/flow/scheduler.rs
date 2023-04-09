@@ -1,8 +1,12 @@
 use std::collections::BTreeSet;
 
+use sqlx::{Pool, Postgres};
+
 use super::{errors::FlowError, model::Task};
 
-#[derive(Debug, PartialEq)]
+#[derive(sqlx::Type, Debug, PartialEq)]
+#[sqlx(type_name = "flow_status")]
+#[sqlx(rename_all = "lowercase")]
 enum FlowStatus {
     Pending,
     Running,
@@ -51,6 +55,7 @@ impl FlowState {
 #[derive(Debug)]
 pub struct Scheduler {
     pub flow_runs: Vec<FlowState>,
+    pub pool: Pool<Postgres>,
 }
 
 impl Scheduler {
@@ -68,6 +73,26 @@ impl Scheduler {
             plan,
             task_definitions,
         ));
+
+        // INSERT INTO flows2 (
+        //     plan,
+        //     current_stage,
+        //     running_tasks,
+        //     finished_tasks,
+        //     failed_tasks,
+        //     task_definitions,
+        //     flow_name,
+        //     status
+        // ) VALUES (
+        //     '[[1,2],[3,4, 5],[6,7]]',
+        //     1,
+        //     '{1,2}',
+        //     '{3,4}',
+        //     '{}',
+        //     '{"task1":{"type":"download","url":"http://example.com"},"task2":{"type":"process","input":"task1"}}',
+        //     'example_flow',
+        //     'pending'
+        // );
 
         return id;
     }
@@ -87,6 +112,10 @@ impl Scheduler {
 
         (*flow).running_tasks.insert(task_id);
 
+        // UPDATE flows2
+        // SET running_tasks = running_tasks || 6
+        // WHERE id = 1;
+
         return Ok(());
     }
 
@@ -101,6 +130,16 @@ impl Scheduler {
         }
 
         return Ok(());
+
+        // UPDATE flows2
+        // SET running_tasks = array_remove(running_tasks, 5),
+        // finished_tasks = finished_tasks || 5,
+        // status =
+        //         case
+        //             when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
+        //             else status
+        //         end
+        // WHERE id = 1;
     }
 
     pub fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
@@ -110,6 +149,12 @@ impl Scheduler {
         (*flow).failed_tasks.insert(task_id);
 
         (*flow).status = FlowStatus::Failed;
+
+        // UPDATE flows
+        // SET running_tasks = array_remove(running_tasks, 5),
+        //     failed_tasks = failed_tasks || 5,
+        //     status       = 'failed'::flow_status
+        // WHERE id = 1;
 
         return Ok(());
     }
@@ -121,6 +166,10 @@ impl Scheduler {
             .filter(|flow| flow.status == FlowStatus::Running || flow.status == FlowStatus::Pending)
             .map(|flow| (flow.id, flow.running_tasks()))
             .collect();
+
+        // SELECT id, running_tasks
+        // FROM flows
+        // WHERE status IN ('running', 'pending');
     }
 
     fn stage_to_tasks(stage: &BTreeSet<usize>, task_definitions: &Vec<Task>) -> Vec<(usize, Task)> {
@@ -131,8 +180,8 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub fn schedule_tasks(
-        &mut self,
+    pub async fn schedule_tasks<'a>(
+        &'a mut self,
         flow_id: usize,
     ) -> Result<Option<Vec<(usize, Task)>>, FlowError> {
         let flow = self.get_flow(flow_id)?;
@@ -163,12 +212,39 @@ impl Scheduler {
 
         let tasks = Scheduler::stage_to_tasks(next_stage, &flow.task_definitions);
 
+        // TODO: flow_status type
+        let rows = sqlx::query!(r#"
+            WITH updated AS (
+                UPDATE flows
+                SET 
+                    current_stage = 
+                        CASE 
+                            WHEN status = 'running'::flow_status THEN current_stage + 1
+                            ELSE current_stage 
+                        END,
+                    status =
+                        CASE 
+                            WHEN status = 'pending'::flow_status THEN 'running'::flow_status
+                            ELSE status 
+                        END
+                WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
+                AND current_stage < json_array_length(plan) - 1
+                AND id = 1
+                AND status IN ('running', 'pending')
+                RETURNING  *
+            ) SELECT plan -> current_stage AS task_id_list, status::text FROM updated;
+        "#).fetch_all(&self.pool).await.unwrap();
+
+        tracing::info!("RECORD IS {:?}", rows);
+
         return Ok(Some(tasks));
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use sqlx::postgres::PgPoolOptions;
+
     use crate::flow::model::Task;
     use std::collections::BTreeSet;
 
@@ -186,8 +262,15 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_scheduler() {
+    #[tokio::test]
+    async fn test_scheduler() {
+        // TODO: Clean DB code
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
             create_fake_task("flow-0-task-1"),
@@ -213,7 +296,10 @@ mod tests {
             BTreeSet::from([2]),
         ];
 
-        let mut scheduler = Scheduler { flow_runs: vec![] };
+        let mut scheduler = Scheduler {
+            flow_runs: vec![],
+            pool,
+        };
 
         let flow_id_0 = scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
         let flow_id_1 = scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
@@ -227,18 +313,18 @@ mod tests {
         );
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0),
+            scheduler.schedule_tasks(flow_id_0).await,
             Ok(Some(vec![(0, create_fake_task("flow-0-task-0"))])),
         );
 
         scheduler.mark_task_running(0, 0).unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
         scheduler.mark_task_finished(0, 0).unwrap();
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0),
+            scheduler.schedule_tasks(flow_id_0).await,
             Ok(Some(vec![
                 (1, create_fake_task("flow-0-task-1")),
                 (2, create_fake_task("flow-0-task-2"))
@@ -256,19 +342,19 @@ mod tests {
             ],
         );
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
         scheduler.mark_task_finished(0, 1).unwrap();
         scheduler.mark_task_finished(0, 2).unwrap();
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0),
+            scheduler.schedule_tasks(flow_id_0).await,
             Ok(Some(vec![(3, create_fake_task("flow-0-task-3")),])),
         );
 
         scheduler.mark_task_finished(0, 3).unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0), Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
         assert_eq!(
             scheduler.get_running_or_pending_flows(),
@@ -276,7 +362,7 @@ mod tests {
         );
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_1),
+            scheduler.schedule_tasks(flow_id_1).await,
             Ok(Some(vec![(0, create_fake_task("flow-1-task-0"))])),
         );
 
@@ -287,17 +373,24 @@ mod tests {
             vec![(flow_id_1, BTreeSet::from([0]))],
         );
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_1), Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
         scheduler.mark_task_failed(1, 0).unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_1), Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
         assert_eq!(scheduler.get_running_or_pending_flows(), vec![]);
     }
 
-    #[test]
-    fn test_scheduler_flow_does_not_exist() {
+    #[tokio::test]
+    async fn test_scheduler_flow_does_not_exist() {
+        // TODO: Clean DB code
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
             create_fake_task("flow-0-task-1"),
@@ -312,7 +405,10 @@ mod tests {
 
         let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-        let mut scheduler = Scheduler { flow_runs: vec![] };
+        let mut scheduler = Scheduler {
+            flow_runs: vec![],
+            pool,
+        };
 
         scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
         scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
@@ -333,7 +429,7 @@ mod tests {
         );
 
         assert_eq!(
-            scheduler.schedule_tasks(1000),
+            scheduler.schedule_tasks(1000).await,
             Err(FlowError::FlowDoesNotExistError)
         );
     }

@@ -6,6 +6,7 @@ use artefacts::{
     init::do_init,
     task::{run_task, SidecarConfig},
 };
+use sqlx::postgres::PgPoolOptions;
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
@@ -27,8 +28,23 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
         }
     };
 
+    // TODO: Clean DB code
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://flowmium:flowmium@localhost/flowmium")
+        .await
+        .unwrap();
+
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+    // --- //
+
     let executor_config = ExecutorConfig::create_default_config(config);
-    let mut sched = Scheduler { flow_runs: vec![] };
+    let mut sched = Scheduler {
+        flow_runs: vec![],
+        pool,
+    };
 
     for dag_file_path in execute_opts.files.iter() {
         let contents = match fs::read_to_string(dag_file_path).await {

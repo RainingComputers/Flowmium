@@ -1,6 +1,9 @@
 down:
 	docker-compose -f test-services.yaml down
 
+up: 
+	docker-compose -f test-services.yaml up
+
 test:
 	mkdir -p target
 
