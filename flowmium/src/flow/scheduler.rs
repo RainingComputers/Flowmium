@@ -5,7 +5,7 @@ use sqlx::{Pool, Postgres};
 use super::{errors::FlowError, model::Task};
 
 #[derive(sqlx::Type, Debug, PartialEq)]
-#[sqlx(type_name = "flow_status", rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
 enum FlowStatus {
     Pending,
     Running,
