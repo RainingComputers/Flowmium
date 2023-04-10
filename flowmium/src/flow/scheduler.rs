@@ -231,7 +231,7 @@ impl Scheduler {
                 AND id = 1
                 AND status IN ('running', 'pending')
                 RETURNING  *
-            ) SELECT plan -> current_stage AS task_id_list, status as "status: FlowStatus" FROM updated;
+            ) SELECT plan -> current_stage AS "task_id_list", status as "status: FlowStatus" FROM updated;
         "#).fetch_all(&self.pool).await.unwrap();
 
         tracing::info!("RECORD IS {:?}", rows);
