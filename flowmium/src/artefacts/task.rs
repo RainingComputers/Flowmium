@@ -2,7 +2,7 @@ use s3::Bucket;
 use serde::Deserialize;
 use serde_json;
 
-use std::process::{Command, ExitCode, ExitStatus};
+use std::process::{Command, ExitCode};
 
 use crate::flow::model::{Input, Output};
 

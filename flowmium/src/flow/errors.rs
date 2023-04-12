@@ -4,15 +4,15 @@ use std::fmt;
 pub enum FlowError {
     CyclicDependenciesError,
     DependentTaskDoesNotExistError,
-    FlowDoesNotExistError,
-    StageDoesNotExistError,
     UnableToSpawnTaskError,
     UnableToConnectToKubernetesError,
     UnexpectedRunnerStateError,
     OutputDoesNotExistError,
     OutputNotFromParentError,
     OutputNotUniqueError,
-    InvalidTaskDefinition,
+    InvalidTaskDefinitionError,
+    InvalidStoredValueError,
+    StoreError,
 }
 
 impl fmt::Display for FlowError {

@@ -72,7 +72,7 @@ fn get_task_envs<'a>(
     task: &'a Task,
     input_json: String,
     output_json: String,
-    flow_id: usize,
+    flow_id: i32,
     config: &'a ExecutorConfig,
 ) -> Vec<serde_json::Value> {
     let mut task_envs: Vec<serde_json::Value> = vec![
@@ -120,8 +120,8 @@ fn get_task_envs<'a>(
 
 #[tracing::instrument(skip(config))]
 async fn spawn_task(
-    flow_id: usize,
-    task_id: usize,
+    flow_id: i32,
+    task_id: i32,
     task: &Task,
     config: &ExecutorConfig,
 ) -> Result<Job, FlowError> {
@@ -134,16 +134,16 @@ async fn spawn_task(
     let input_json = match serde_json::to_string(&task.inputs) {
         Ok(string) => string,
         Err(error) => {
-            tracing::error!(%error, "Unable to serailize input");
-            return Err(FlowError::InvalidTaskDefinition);
+            tracing::error!(%error, "Unable to serialize input");
+            return Err(FlowError::InvalidTaskDefinitionError);
         }
     };
 
     let output_json = match serde_json::to_string(&task.outputs) {
         Ok(string) => string,
         Err(error) => {
-            tracing::error!(%error, "Unable to serailize output");
-            return Err(FlowError::InvalidTaskDefinition);
+            tracing::error!(%error, "Unable to serialize output");
+            return Err(FlowError::InvalidTaskDefinitionError);
         }
     };
 
@@ -215,8 +215,8 @@ async fn spawn_task(
 
 #[tracing::instrument(skip(config))]
 async fn list_pods(
-    flow_id: usize,
-    task_id: usize,
+    flow_id: i32,
+    task_id: i32,
     config: &ExecutorConfig,
 ) -> Result<ObjectList<Pod>, FlowError> {
     let client = get_kubernetes_client().await?;
@@ -262,8 +262,8 @@ fn phase_to_task_status(phase: String) -> TaskStatus {
 
 #[tracing::instrument(skip(config))]
 async fn get_task_status(
-    flow_id: usize,
-    task_id: usize,
+    flow_id: i32,
+    task_id: i32,
     config: &ExecutorConfig,
 ) -> Result<TaskStatus, FlowError> {
     let pod_list = list_pods(flow_id, task_id, config).await?;
@@ -292,11 +292,11 @@ async fn get_task_status(
 pub async fn instantiate_flow(
     flow: ContainerDAGFlow,
     sched: &mut Scheduler,
-) -> Result<usize, FlowError> {
+) -> Result<i32, FlowError> {
     let plan = construct_plan(&flow.tasks)?;
 
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
-    let flow_id = sched.create_flow(flow.name, plan, flow.tasks);
+    let flow_id = sched.create_flow(flow.name, plan, flow.tasks).await?;
 
     return Ok(flow_id);
 }
@@ -304,7 +304,7 @@ pub async fn instantiate_flow(
 #[tracing::instrument(skip(sched, config))]
 async fn sched_pending_tasks(
     sched: &mut Scheduler,
-    flow_id: usize,
+    flow_id: i32,
     config: &ExecutorConfig,
 ) -> Result<bool, FlowError> {
     let option_tasks = sched.schedule_tasks(flow_id).await?;
@@ -312,7 +312,7 @@ async fn sched_pending_tasks(
     if let Some(tasks) = option_tasks {
         for (task_id, task) in tasks {
             match spawn_task(flow_id, task_id, &task, &config).await {
-                Ok(_) => sched.mark_task_running(flow_id, task_id)?,
+                Ok(_) => sched.mark_task_running(flow_id, task_id).await?,
                 Err(_) => break,
             }
         }
@@ -326,35 +326,37 @@ async fn sched_pending_tasks(
 #[tracing::instrument(skip(sched, config))]
 async fn mark_running_tasks(
     sched: &mut Scheduler,
-    flow_id: usize,
-    task_id: usize,
+    flow_id: i32,
+    task_id: i32,
     config: &ExecutorConfig,
 ) -> Result<(), FlowError> {
     let status = match get_task_status(flow_id, task_id, config).await {
         Ok(status) => status,
-        Err(_) => return sched.mark_task_failed(flow_id, task_id),
+        Err(_) => return sched.mark_task_failed(flow_id, task_id).await,
     };
 
     return match status {
         TaskStatus::Pending | TaskStatus::Running => Ok(()),
-        TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id),
-        TaskStatus::Failed | TaskStatus::Unknown => sched.mark_task_failed(flow_id, task_id),
+        TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id).await,
+        TaskStatus::Failed | TaskStatus::Unknown => sched.mark_task_failed(flow_id, task_id).await,
     };
 }
 
 #[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &mut Scheduler, config: &ExecutorConfig) {
-    for (flow_id, running_tasks) in sched.get_running_or_pending_flows() {
-        match sched_pending_tasks(sched, flow_id, &config).await {
-            Ok(true) => continue,
-            Ok(false) => (),
-            Err(_) => break,
-        }
+    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows().await {
+        for (flow_id, running_tasks) in tasks_to_schedule {
+            match sched_pending_tasks(sched, flow_id, &config).await {
+                Ok(true) => continue,
+                Ok(false) => (),
+                Err(_) => break,
+            }
 
-        for task_id in running_tasks {
-            if let Err(_) = mark_running_tasks(sched, flow_id, task_id, &config).await {
-                break;
-            };
+            for task_id in running_tasks {
+                if let Err(_) = mark_running_tasks(sched, flow_id, task_id, &config).await {
+                    break;
+                };
+            }
         }
     }
 }
@@ -542,10 +544,7 @@ mod tests {
             .unwrap();
 
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler {
-            flow_runs: vec![],
-            pool,
-        };
+        let mut sched = Scheduler { pool };
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
@@ -612,10 +611,7 @@ mod tests {
             .unwrap();
 
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler {
-            flow_runs: vec![],
-            pool,
-        };
+        let mut sched = Scheduler { pool };
 
         let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
             .await

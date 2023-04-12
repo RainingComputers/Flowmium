@@ -41,10 +41,7 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
     // --- //
 
     let executor_config = ExecutorConfig::create_default_config(config);
-    let mut sched = Scheduler {
-        flow_runs: vec![],
-        pool,
-    };
+    let mut sched = Scheduler { pool };
 
     for dag_file_path in execute_opts.files.iter() {
         let contents = match fs::read_to_string(dag_file_path).await {

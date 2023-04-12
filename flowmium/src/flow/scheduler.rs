@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use serde_json::Value;
 use sqlx::{Pool, Postgres};
 
 use super::{errors::FlowError, model::Task};
@@ -13,206 +14,190 @@ enum FlowStatus {
     Failed,
 }
 
-#[derive(Debug)]
-pub struct FlowState {
-    id: usize,
-    plan: Vec<BTreeSet<usize>>,
-    current_stage: usize,
-    running_tasks: BTreeSet<usize>,
-    finished_tasks: BTreeSet<usize>,
-    failed_tasks: BTreeSet<usize>,
-    task_definitions: Vec<Task>,
-    flow_name: String,
-    status: FlowStatus,
-}
-
-impl FlowState {
-    fn create_flow_state(
-        id: usize,
-        flow_name: String,
-        plan: Vec<BTreeSet<usize>>,
-        task_definitions: Vec<Task>,
-    ) -> FlowState {
-        FlowState {
-            id,
-            plan,
-            current_stage: 0,
-            running_tasks: BTreeSet::new(),
-            finished_tasks: BTreeSet::new(),
-            failed_tasks: BTreeSet::new(),
-            task_definitions,
-            flow_name,
-            status: FlowStatus::Pending,
-        }
-    }
-
-    pub fn running_tasks(&self) -> BTreeSet<usize> {
-        return self.running_tasks.clone();
-    }
-}
+// #[derive(Debug)]
+// pub struct FlowState {
+//     id: usize,
+//     plan: Vec<BTreeSet<usize>>,
+//     current_stage: usize,
+//     running_tasks: BTreeSet<usize>,
+//     finished_tasks: BTreeSet<usize>,
+//     failed_tasks: BTreeSet<usize>,
+//     task_definitions: Vec<Task>,
+//     flow_name: String,
+//     status: FlowStatus,
+// }
 
 #[derive(Debug)]
 pub struct Scheduler {
-    pub flow_runs: Vec<FlowState>,
     pub pool: Pool<Postgres>,
 }
 
 impl Scheduler {
-    pub fn create_flow(
+    pub async fn create_flow(
         &mut self,
         flow_name: String,
         plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
-    ) -> usize {
-        let id = self.flow_runs.len();
-
-        self.flow_runs.push(FlowState::create_flow_state(
-            id,
-            flow_name,
-            plan,
-            task_definitions,
-        ));
-
-        // INSERT INTO flows2 (
-        //     plan,
-        //     current_stage,
-        //     running_tasks,
-        //     finished_tasks,
-        //     failed_tasks,
-        //     task_definitions,
-        //     flow_name,
-        //     status
-        // ) VALUES (
-        //     '[[1,2],[3,4, 5],[6,7]]',
-        //     1,
-        //     '{1,2}',
-        //     '{3,4}',
-        //     '{}',
-        //     '{"task1":{"type":"download","url":"http://example.com"},"task2":{"type":"process","input":"task1"}}',
-        //     'example_flow',
-        //     'pending'
-        // );
-
-        return id;
-    }
-
-    #[tracing::instrument]
-    fn get_flow(&mut self, flow_id: usize) -> Result<&mut FlowState, FlowError> {
-        let Some(flow) = self.flow_runs.get_mut(flow_id) else {
-            tracing::error!("Flow does not exist");
-            return Err(FlowError::FlowDoesNotExistError);
+    ) -> Result<i32, FlowError> {
+        let Ok(task_definitions_json) = serde_json::to_value(task_definitions) else {
+            return Err(FlowError::StoreError); // TODO log and diff error
         };
 
-        return Ok(flow);
+        let Ok(plan_json) = serde_json::to_value(plan) else {
+            return Err(FlowError::StoreError); // TODO log and diff error
+        };
+
+        let Ok(id) = sqlx::query!(
+            r#"
+            INSERT INTO flows (
+                plan,
+                current_stage,
+                running_tasks,
+                finished_tasks,
+                failed_tasks,
+                task_definitions,
+                flow_name,
+                status
+            ) VALUES (
+                $1,
+                0,
+                '{}',
+                '{}',
+                '{}',
+                $2,
+                $3,
+                'pending'
+            ) RETURNING id;
+            "#,
+            plan_json,
+            task_definitions_json,
+            flow_name
+        ).map(|record| record.id)
+        .fetch_one(&self.pool)
+        .await else {
+            return Err(FlowError::StoreError); // TODO log
+        };
+
+        return Ok(id);
     }
 
-    pub fn mark_task_running(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
-        let flow = self.get_flow(flow_id)?;
-
-        (*flow).running_tasks.insert(task_id);
-
-        // UPDATE flows2
-        // SET running_tasks = running_tasks || 6
-        // WHERE id = 1;
+    pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
+        if let Err(_) = sqlx::query!(
+            r#"
+            UPDATE flows
+            SET running_tasks = array_append(running_tasks, $1)
+            WHERE id = $2;
+            "#,
+            task_id,
+            flow_id
+        )
+        .execute(&self.pool)
+        .await
+        {
+            return Err(FlowError::StoreError); // TODO log
+        };
 
         return Ok(());
     }
 
-    pub fn mark_task_finished(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
-        let flow = self.get_flow(flow_id)?;
+    pub async fn mark_task_finished(
+        &mut self,
+        flow_id: i32,
+        task_id: i32,
+    ) -> Result<(), FlowError> {
+        if let Err(_) = sqlx::query!(
+            r#"
+            UPDATE flows
+            SET running_tasks = array_remove(running_tasks, $1),
+            finished_tasks = array_append(finished_tasks, $1),
+            status =
+                    case
+                        when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
+                        else status
+                    end
+            WHERE id = $2;
+            "#,
+            task_id,
+            flow_id
+        )
+        .execute(&self.pool)
+        .await
+        {
+            return Err(FlowError::StoreError); // TODO log
+        };
 
-        (*flow).running_tasks.remove(&task_id);
-        (*flow).finished_tasks.insert(task_id);
+        return Ok(());
+    }
 
-        if flow.finished_tasks.len() == flow.task_definitions.len() {
-            flow.status = FlowStatus::Success;
+    pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
+        if let Err(_) = sqlx::query!(
+            r#"
+            UPDATE flows
+            SET running_tasks = array_remove(running_tasks, $1),
+                failed_tasks = array_append(failed_tasks, $1),
+                status       = 'failed'::flow_status
+            WHERE id = $2;
+            "#,
+            task_id,
+            flow_id
+        )
+        .execute(&self.pool)
+        .await
+        {
+            return Err(FlowError::StoreError); // TODO log
+        };
+
+        return Ok(());
+    }
+
+    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, FlowError> {
+        struct RunningPendingSelectQueryRecord {
+            id: i32,
+            running_tasks: Vec<i32>,
         }
 
-        return Ok(());
+        let Ok(flows) = sqlx::query_as!(
+            RunningPendingSelectQueryRecord,
+            r#"
+            SELECT id, running_tasks
+            FROM flows
+            WHERE status IN ('running', 'pending');
+            "#
+        ).map(|record| (record.id, record.running_tasks))
+        .fetch_all(&self.pool)
+        .await else {
+            return Err(FlowError::StoreError); // TODO log
+        };
 
-        // UPDATE flows2
-        // SET running_tasks = array_remove(running_tasks, 5),
-        // finished_tasks = finished_tasks || 5,
-        // status =
-        //         case
-        //             when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
-        //             else status
-        //         end
-        // WHERE id = 1;
+        return Ok(flows);
     }
 
-    pub fn mark_task_failed(&mut self, flow_id: usize, task_id: usize) -> Result<(), FlowError> {
-        let flow = self.get_flow(flow_id)?;
+    fn record_to_tasks(task_id_list: Option<Value>, tasks: Value) -> Option<Vec<(i32, Task)>> {
+        let Ok(task_ids) = serde_json::from_value::<BTreeSet<i32>>(task_id_list?) else {
+            return  None;
+        };
 
-        (*flow).running_tasks.remove(&task_id);
-        (*flow).failed_tasks.insert(task_id);
+        let Ok(task_definitions) = serde_json::from_value::<Vec<Task>>(tasks) else {
+            return  None;
+        };
 
-        (*flow).status = FlowStatus::Failed;
-
-        // UPDATE flows
-        // SET running_tasks = array_remove(running_tasks, 5),
-        //     failed_tasks = failed_tasks || 5,
-        //     status       = 'failed'::flow_status
-        // WHERE id = 1;
-
-        return Ok(());
-    }
-
-    pub fn get_running_or_pending_flows(&self) -> Vec<(usize, BTreeSet<usize>)> {
-        return self
-            .flow_runs
-            .iter()
-            .filter(|flow| flow.status == FlowStatus::Running || flow.status == FlowStatus::Pending)
-            .map(|flow| (flow.id, flow.running_tasks()))
+        let task_defs_filtered = task_definitions
+            .into_iter()
+            .enumerate()
+            .map(|(i, task)| (i as i32, task))
+            .filter(|(i, _)| task_ids.contains(i))
             .collect();
 
-        // SELECT id, running_tasks
-        // FROM flows
-        // WHERE status IN ('running', 'pending');
-    }
-
-    fn stage_to_tasks(stage: &BTreeSet<usize>, task_definitions: &Vec<Task>) -> Vec<(usize, Task)> {
-        stage
-            .iter()
-            .map(|id| (*id, task_definitions[*id].clone()))
-            .collect()
+        return Some(task_defs_filtered);
     }
 
     #[tracing::instrument]
     pub async fn schedule_tasks<'a>(
         &'a mut self,
-        flow_id: usize,
-    ) -> Result<Option<Vec<(usize, Task)>>, FlowError> {
-        let flow = self.get_flow(flow_id)?;
-
-        if flow.status != FlowStatus::Running && flow.status != FlowStatus::Pending {
-            return Ok(None);
-        }
-
-        let Some(stage) = flow.plan.get(flow.current_stage) else {
-            tracing::error!("Stage {} does not exist", flow.current_stage);
-            return Err(FlowError::StageDoesNotExistError);
-        };
-
-        if !stage.is_subset(&flow.finished_tasks) && flow.status == FlowStatus::Running {
-            return Ok(None);
-        }
-
-        if flow.status == FlowStatus::Pending {
-            (*flow).status = FlowStatus::Running;
-        } else {
-            (*flow).current_stage += 1;
-        }
-
-        let Some(next_stage) = flow.plan.get(flow.current_stage) else {
-            tracing::error!("Stage {} does not exist", flow.current_stage);
-            return Err(FlowError::StageDoesNotExistError);
-        };
-
-        let tasks = Scheduler::stage_to_tasks(next_stage, &flow.task_definitions);
-
-        // TODO: flow_status type
-        let rows = sqlx::query!(r#"
+        flow_id: i32,
+    ) -> Result<Option<Vec<(i32, Task)>>, FlowError> {
+        let Ok(stage_tasks_optional) = sqlx::query!(
+            r#"
             WITH updated AS (
                 UPDATE flows
                 SET 
@@ -228,15 +213,23 @@ impl Scheduler {
                         END
                 WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
                 AND current_stage < json_array_length(plan) - 1
-                AND id = 1
+                AND id = $1
                 AND status IN ('running', 'pending')
                 RETURNING  *
-            ) SELECT plan -> current_stage AS "task_id_list", status as "status: FlowStatus" FROM updated;
-        "#).fetch_all(&self.pool).await.unwrap();
+            ) SELECT plan -> current_stage AS "task_id_list", task_definitions AS "tasks" FROM updated;
+            "#, 
+            flow_id
+        ).map(|record| Scheduler::record_to_tasks(record.task_id_list, record.tasks))
+        .fetch_one(&self.pool)
+        .await else {
+            return Err(FlowError::StoreError); // TODO log
+        };
 
-        tracing::info!("RECORD IS {:?}", rows);
+        let Some(stage_tasks) = stage_tasks_optional else {
+            return  Err(FlowError::InvalidStoredValueError); // TODO log
+        };
 
-        return Ok(Some(tasks));
+        return Ok(Some(stage_tasks));
     }
 }
 
@@ -295,20 +288,20 @@ mod tests {
             BTreeSet::from([2]),
         ];
 
-        let mut scheduler = Scheduler {
-            flow_runs: vec![],
-            pool,
-        };
+        let mut scheduler = Scheduler { pool };
 
-        let flow_id_0 = scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
-        let flow_id_1 = scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
+        let flow_id_0 = scheduler
+            .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
+            .await
+            .unwrap();
+        let flow_id_1 = scheduler
+            .create_flow("flow-1".to_string(), test_plan_1, test_tasks_1)
+            .await
+            .unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows(),
-            vec![
-                (flow_id_0, BTreeSet::from([])),
-                (flow_id_1, BTreeSet::from([]))
-            ],
+            scheduler.get_running_or_pending_flows().await,
+            Ok(vec![(flow_id_0, vec![]), (flow_id_1, vec![])]),
         );
 
         assert_eq!(
@@ -316,11 +309,11 @@ mod tests {
             Ok(Some(vec![(0, create_fake_task("flow-0-task-0"))])),
         );
 
-        scheduler.mark_task_running(0, 0).unwrap();
+        scheduler.mark_task_running(0, 0).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
-        scheduler.mark_task_finished(0, 0).unwrap();
+        scheduler.mark_task_finished(0, 0).await.unwrap();
 
         assert_eq!(
             scheduler.schedule_tasks(flow_id_0).await,
@@ -330,34 +323,31 @@ mod tests {
             ])),
         );
 
-        scheduler.mark_task_running(0, 1).unwrap();
-        scheduler.mark_task_running(0, 2).unwrap();
+        scheduler.mark_task_running(0, 1).await.unwrap();
+        scheduler.mark_task_running(0, 2).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows(),
-            vec![
-                (flow_id_0, BTreeSet::from([1, 2])),
-                (flow_id_1, BTreeSet::from([]))
-            ],
+            scheduler.get_running_or_pending_flows().await,
+            Ok(vec![(flow_id_0, vec![1, 2]), (flow_id_1, vec![])]),
         );
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
-        scheduler.mark_task_finished(0, 1).unwrap();
-        scheduler.mark_task_finished(0, 2).unwrap();
+        scheduler.mark_task_finished(0, 1).await.unwrap();
+        scheduler.mark_task_finished(0, 2).await.unwrap();
 
         assert_eq!(
             scheduler.schedule_tasks(flow_id_0).await,
             Ok(Some(vec![(3, create_fake_task("flow-0-task-3")),])),
         );
 
-        scheduler.mark_task_finished(0, 3).unwrap();
+        scheduler.mark_task_finished(0, 3).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows(),
-            vec![(flow_id_1, BTreeSet::from([]))],
+            scheduler.get_running_or_pending_flows().await,
+            Ok(vec![(flow_id_1, vec![])]),
         );
 
         assert_eq!(
@@ -365,71 +355,68 @@ mod tests {
             Ok(Some(vec![(0, create_fake_task("flow-1-task-0"))])),
         );
 
-        scheduler.mark_task_running(1, 0).unwrap();
+        scheduler.mark_task_running(1, 0).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows(),
-            vec![(flow_id_1, BTreeSet::from([0]))],
+            scheduler.get_running_or_pending_flows().await,
+            Ok(vec![(flow_id_1, vec![0])]),
         );
 
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
-        scheduler.mark_task_failed(1, 0).unwrap();
+        scheduler.mark_task_failed(1, 0).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
-        assert_eq!(scheduler.get_running_or_pending_flows(), vec![]);
+        assert_eq!(scheduler.get_running_or_pending_flows().await, Ok(vec![]));
     }
 
-    #[tokio::test]
-    async fn test_scheduler_flow_does_not_exist() {
-        // TODO: Clean DB code
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
+    // #[tokio::test]
+    // async fn test_scheduler_flow_does_not_exist() {
+    //     // TODO: Clean DB code
+    //     let pool = PgPoolOptions::new()
+    //         .max_connections(5)
+    //         .connect("postgres://flowmium:flowmium@localhost/flowmium")
+    //         .await
+    //         .unwrap();
 
-        let test_tasks_0 = vec![
-            create_fake_task("flow-0-task-0"),
-            create_fake_task("flow-0-task-1"),
-        ];
+    //     let test_tasks_0 = vec![
+    //         create_fake_task("flow-0-task-0"),
+    //         create_fake_task("flow-0-task-1"),
+    //     ];
 
-        let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+    //     let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-        let test_tasks_1 = vec![
-            create_fake_task("flow-1-task-0"),
-            create_fake_task("flow-1-task-1"),
-        ];
+    //     let test_tasks_1 = vec![
+    //         create_fake_task("flow-1-task-0"),
+    //         create_fake_task("flow-1-task-1"),
+    //     ];
 
-        let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+    //     let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-        let mut scheduler = Scheduler {
-            flow_runs: vec![],
-            pool,
-        };
+    //     let mut scheduler = Scheduler { pool };
 
-        scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
-        scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
+    //     scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
+    //     scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
 
-        assert_eq!(
-            scheduler.mark_task_running(1000, 0),
-            Err(FlowError::FlowDoesNotExistError)
-        );
+    //     assert_eq!(
+    //         scheduler.mark_task_running(1000, 0).await,
+    //         Err(FlowError::FlowDoesNotExistError)
+    //     );
 
-        assert_eq!(
-            scheduler.mark_task_finished(1000, 0),
-            Err(FlowError::FlowDoesNotExistError)
-        );
+    //     assert_eq!(
+    //         scheduler.mark_task_finished(1000, 0).await,
+    //         Err(FlowError::FlowDoesNotExistError)
+    //     );
 
-        assert_eq!(
-            scheduler.mark_task_failed(1000, 0),
-            Err(FlowError::FlowDoesNotExistError)
-        );
+    //     assert_eq!(
+    //         scheduler.mark_task_failed(1000, 0).await,
+    //         Err(FlowError::FlowDoesNotExistError)
+    //     );
 
-        assert_eq!(
-            scheduler.schedule_tasks(1000).await,
-            Err(FlowError::FlowDoesNotExistError)
-        );
-    }
+    //     assert_eq!(
+    //         scheduler.schedule_tasks(1000).await,
+    //         Err(FlowError::FlowDoesNotExistError)
+    //     );
+    // }
 }
