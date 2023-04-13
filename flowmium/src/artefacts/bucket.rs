@@ -3,6 +3,9 @@ use tokio::fs;
 
 use super::errors::ArtefactError;
 
+// TODO: create folders
+// TODO: create bucker on init
+
 pub fn get_bucket(
     access_key: &String,
     secret_key: &String,
