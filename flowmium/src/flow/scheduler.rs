@@ -1,6 +1,4 @@
 use std::collections::BTreeSet;
-
-use serde_json::Value;
 use sqlx::{Pool, Postgres};
 
 use super::{errors::FlowError, model::Task};
@@ -175,7 +173,7 @@ impl Scheduler {
         return Ok(flows);
     }
 
-    fn record_to_tasks(task_id_list: Option<Value>, tasks: Value) -> Option<Vec<(i32, Task)>> {
+    fn record_to_tasks(task_id_list: Option<serde_json::Value>, tasks: serde_json::Value) -> Option<Vec<(i32, Task)>> {
         let Ok(task_ids) = serde_json::from_value::<BTreeSet<i32>>(task_id_list?) else {
             return  None;
         };
