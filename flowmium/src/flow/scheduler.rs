@@ -27,6 +27,8 @@ enum FlowStatus {
 //     status: FlowStatus,
 // }
 
+// TODO: table as env variable
+
 #[derive(Debug)]
 pub struct Scheduler {
     pub pool: Pool<Postgres>,
@@ -124,7 +126,7 @@ impl Scheduler {
         .await
         {
             return Err(FlowError::StoreError); // TODO log
-        };
+        }; // TODO: check if one row was updated
 
         return Ok(());
     }
@@ -161,7 +163,8 @@ impl Scheduler {
             r#"
             SELECT id, running_tasks
             FROM flows
-            WHERE status IN ('running', 'pending');
+            WHERE status IN ('running', 'pending')
+            ORDER BY id ASC;
             "#
         ).map(|record| (record.id, record.running_tasks))
         .fetch_all(&self.pool)
@@ -196,7 +199,7 @@ impl Scheduler {
         &'a mut self,
         flow_id: i32,
     ) -> Result<Option<Vec<(i32, Task)>>, FlowError> {
-        let record = match sqlx::query!(
+        let record_optional = match sqlx::query!(
             r#"
             WITH updated AS (
                 UPDATE flows
@@ -228,7 +231,7 @@ impl Scheduler {
             }
         };
 
-        let Some(stage_tasks_optional) = record else {
+        let Some(stage_tasks_optional) = record_optional else {
             return Ok(None); 
         };
 
@@ -242,6 +245,7 @@ impl Scheduler {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
     use sqlx::postgres::PgPoolOptions;
 
     use crate::flow::model::Task;
@@ -262,6 +266,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_scheduler() {
         // TODO: Clean DB code
         let pool = PgPoolOptions::new()
@@ -269,6 +274,8 @@ mod tests {
             .connect("postgres://flowmium:flowmium@localhost/flowmium")
             .await
             .unwrap();
+
+        sqlx::query!("DELETE from flows;").execute(&pool).await.unwrap();
 
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
