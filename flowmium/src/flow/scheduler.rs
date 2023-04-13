@@ -196,7 +196,7 @@ impl Scheduler {
         &'a mut self,
         flow_id: i32,
     ) -> Result<Option<Vec<(i32, Task)>>, FlowError> {
-        let Ok(stage_tasks_optional) = sqlx::query!(
+        let record = match sqlx::query!(
             r#"
             WITH updated AS (
                 UPDATE flows
@@ -220,13 +220,20 @@ impl Scheduler {
             "#, 
             flow_id
         ).map(|record| Scheduler::record_to_tasks(record.task_id_list, record.tasks))
-        .fetch_one(&self.pool)
-        .await else {
-            return Err(FlowError::StoreError); // TODO log
+        .fetch_optional(&self.pool)
+        .await {
+            Ok(tasks) => tasks,
+            Err(err)  => {
+                return Err(FlowError::StoreError); // TODO: log
+            }
+        };
+
+        let Some(stage_tasks_optional) = record else {
+            return Ok(None); 
         };
 
         let Some(stage_tasks) = stage_tasks_optional else {
-            return  Err(FlowError::InvalidStoredValueError); // TODO log
+            return Err(FlowError::InvalidStoredValueError); // TODO: log
         };
 
         return Ok(Some(stage_tasks));
@@ -309,11 +316,11 @@ mod tests {
             Ok(Some(vec![(0, create_fake_task("flow-0-task-0"))])),
         );
 
-        scheduler.mark_task_running(0, 0).await.unwrap();
+        scheduler.mark_task_running(flow_id_0, 0).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
-        scheduler.mark_task_finished(0, 0).await.unwrap();
+        scheduler.mark_task_finished(flow_id_0, 0).await.unwrap();
 
         assert_eq!(
             scheduler.schedule_tasks(flow_id_0).await,
@@ -323,8 +330,8 @@ mod tests {
             ])),
         );
 
-        scheduler.mark_task_running(0, 1).await.unwrap();
-        scheduler.mark_task_running(0, 2).await.unwrap();
+        scheduler.mark_task_running(flow_id_0, 1).await.unwrap();
+        scheduler.mark_task_running(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
             scheduler.get_running_or_pending_flows().await,
@@ -333,15 +340,15 @@ mod tests {
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
-        scheduler.mark_task_finished(0, 1).await.unwrap();
-        scheduler.mark_task_finished(0, 2).await.unwrap();
+        scheduler.mark_task_finished(flow_id_0, 1).await.unwrap();
+        scheduler.mark_task_finished(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
             scheduler.schedule_tasks(flow_id_0).await,
             Ok(Some(vec![(3, create_fake_task("flow-0-task-3")),])),
         );
 
-        scheduler.mark_task_finished(0, 3).await.unwrap();
+        scheduler.mark_task_finished(flow_id_0, 3).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
 
@@ -355,7 +362,7 @@ mod tests {
             Ok(Some(vec![(0, create_fake_task("flow-1-task-0"))])),
         );
 
-        scheduler.mark_task_running(1, 0).await.unwrap();
+        scheduler.mark_task_running(flow_id_1, 0).await.unwrap();
 
         assert_eq!(
             scheduler.get_running_or_pending_flows().await,
@@ -364,7 +371,7 @@ mod tests {
 
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
-        scheduler.mark_task_failed(1, 0).await.unwrap();
+        scheduler.mark_task_failed(flow_id_1, 0).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
 
