@@ -3,8 +3,6 @@ use tokio::{fs, io};
 
 use super::errors::ArtefactError;
 
-// TODO: create bucker on init
-
 pub fn get_bucket(
     access_key: &String,
     secret_key: &String,

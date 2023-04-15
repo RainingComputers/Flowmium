@@ -7,12 +7,12 @@ up:
 test:
 	mkdir -p target
 
+	# Run sqlx migrations
+	sqlx migrate run
+
 	# Build executable and package into a docker image
 	cargo build
 	docker build . -f test-dockerfile -t flowmium-debug
-
-	# Start test services with k3s cluster and a container registry
-	docker-compose -f test-services.yaml up -d
 
 	# Push the docker image with static executble into the registry in test services
 	docker tag flowmium-debug localhost:5000/flowmium-debug:latest

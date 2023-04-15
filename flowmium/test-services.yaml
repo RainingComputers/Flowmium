@@ -49,6 +49,21 @@ services:
       - POSTGRES_DB=flowmium
     ports:
       - '5432:5432'
+  buckets:
+    networks:
+     testnet:
+       ipv4_address: 172.16.238.5
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add testminio http://minio:9000 minio password;
+      /usr/bin/mc rm -r --force testminio/flowmium-test;
+      /usr/bin/mc mb testminio/flowmium-test;
+      /usr/bin/mc policy download testminio/flowmium-test;
+      exit 0;
+      "
 networks:
   testnet:
     ipam:
