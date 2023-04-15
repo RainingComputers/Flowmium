@@ -12,7 +12,7 @@ pub enum FlowError {
     OutputNotUniqueError,
     InvalidTaskDefinitionError,
     InvalidStoredValueError,
-    StoreError,
+    DatabaseQueryError,
 }
 
 impl fmt::Display for FlowError {

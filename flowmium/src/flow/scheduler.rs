@@ -25,8 +25,6 @@ enum FlowStatus {
 //     status: FlowStatus,
 // }
 
-// TODO: table as env variable
-
 #[derive(Debug)]
 pub struct Scheduler {
     pub pool: Pool<Postgres>,
@@ -39,15 +37,23 @@ impl Scheduler {
         plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
     ) -> Result<i32, FlowError> {
-        let Ok(task_definitions_json) = serde_json::to_value(task_definitions) else {
-            return Err(FlowError::StoreError); // TODO log and diff error
+        let task_definitions_json = match serde_json::to_value(task_definitions) {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!(%error, "Unable to serialize task definition to JSON while creating flow");
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
-        let Ok(plan_json) = serde_json::to_value(plan) else {
-            return Err(FlowError::StoreError); // TODO log and diff error
+        let plan_json = match serde_json::to_value(plan) {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!(%error, "Unable to serialize plan to JSON while creating flow");
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
-        let Ok(id) = sqlx::query!(
+        let id = match sqlx::query!(
             r#"
             INSERT INTO flows (
                 plan,
@@ -72,17 +78,23 @@ impl Scheduler {
             plan_json,
             task_definitions_json,
             flow_name
-        ).map(|record| record.id)
+        )
+        .map(|record| record.id)
         .fetch_one(&self.pool)
-        .await else {
-            return Err(FlowError::StoreError); // TODO log
+        .await
+        {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::error!(%error, "Unable to create flow in database");
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
         return Ok(id);
     }
 
     pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
-        if let Err(_) = sqlx::query!(
+        if let Err(error) = sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_append(running_tasks, $1)
@@ -94,7 +106,8 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            return Err(FlowError::StoreError); // TODO log
+            tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
+            return Err(FlowError::DatabaseQueryError);
         };
 
         return Ok(());
@@ -105,7 +118,7 @@ impl Scheduler {
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), FlowError> {
-        if let Err(_) = sqlx::query!(
+        if let Err(error) = sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_remove(running_tasks, $1),
@@ -123,14 +136,15 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            return Err(FlowError::StoreError); // TODO log
+            tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
+            return Err(FlowError::DatabaseQueryError);
         }; // TODO: check if one row was updated
 
         return Ok(());
     }
 
     pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
-        if let Err(_) = sqlx::query!(
+        if let Err(error) = sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_remove(running_tasks, $1),
@@ -144,7 +158,8 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            return Err(FlowError::StoreError); // TODO log
+            tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
+            return Err(FlowError::DatabaseQueryError);
         };
 
         return Ok(());
@@ -156,7 +171,7 @@ impl Scheduler {
             running_tasks: Vec<i32>,
         }
 
-        let Ok(flows) = sqlx::query_as!(
+        let flows = match sqlx::query_as!(
             RunningPendingSelectQueryRecord,
             r#"
             SELECT id, running_tasks
@@ -164,10 +179,16 @@ impl Scheduler {
             WHERE status IN ('running', 'pending')
             ORDER BY id ASC;
             "#
-        ).map(|record| (record.id, record.running_tasks))
+        )
+        .map(|record| (record.id, record.running_tasks))
         .fetch_all(&self.pool)
-        .await else {
-            return Err(FlowError::StoreError); // TODO log
+        .await
+        {
+            Ok(flows) => flows,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch running or pending flows from database");
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
         return Ok(flows);
@@ -224,17 +245,19 @@ impl Scheduler {
         .fetch_optional(&self.pool)
         .await {
             Ok(tasks) => tasks,
-            Err(err)  => {
-                return Err(FlowError::StoreError); // TODO: log
+            Err(error)  => {
+                tracing::error!(%error, "Unable to fetch next stage from database");
+                return Err(FlowError::DatabaseQueryError);
             }
         };
 
         let Some(stage_tasks_optional) = record_optional else {
-            return Ok(None); 
+            return Ok(None);
         };
 
         let Some(stage_tasks) = stage_tasks_optional else {
-            return Err(FlowError::InvalidStoredValueError); // TODO: log
+            tracing::error!("Invalid record in database for flow {}", flow_id);
+            return Err(FlowError::InvalidStoredValueError);
         };
 
         return Ok(Some(stage_tasks));
@@ -251,6 +274,21 @@ mod tests {
 
     use super::*;
 
+    async fn get_test_pool() -> Pool<Postgres> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
+        sqlx::query!("DELETE from flows;")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        return pool;
+    }
+
     fn create_fake_task(task_name: &str) -> Task {
         Task {
             name: task_name.to_string(),
@@ -266,14 +304,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_scheduler() {
-        // TODO: Clean DB code
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
-        sqlx::query!("DELETE from flows;").execute(&pool).await.unwrap();
+        let pool = get_test_pool().await;
 
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
