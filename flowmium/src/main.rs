@@ -1,12 +1,13 @@
 mod args;
 mod artefacts;
 mod flow;
+mod pool;
 
 use artefacts::{
     init::do_init,
     task::{run_task, SidecarConfig},
 };
-use sqlx::postgres::PgPoolOptions;
+use pool::{init_db_and_get_pool, PostgresConfig};
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
@@ -28,17 +29,18 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
         }
     };
 
-    // TODO: Clean DB code
+    let database_config: PostgresConfig = match envy::prefixed("FLOWMIUM_").from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::error!(%error, "Invalid env config for database");
+            return ExitCode::FAILURE;
+        }
+    };
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect("postgres://flowmium:flowmium@localhost/flowmium")
-        .await
-        .unwrap();
-
-    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-
-    // --- //
+    let Some(pool) = init_db_and_get_pool(database_config).await else {
+        tracing::error!("Unable to initialize database");
+        return ExitCode::FAILURE;
+    };
 
     let executor_config = ExecutorConfig::create_default_config(config);
     let mut sched = Scheduler { pool };

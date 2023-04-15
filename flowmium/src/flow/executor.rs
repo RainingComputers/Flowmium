@@ -368,11 +368,21 @@ mod tests {
 
     use kube::api::DeleteParams;
     use serial_test::serial;
-    use sqlx::postgres::PgPoolOptions;
+    use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
     use crate::flow::model::{Input, Output};
 
     use super::*;
+
+    async fn get_test_pool() -> Pool<Postgres> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://flowmium:flowmium@localhost/flowmium")
+            .await
+            .unwrap();
+
+        return pool;
+    }
 
     fn test_pod_config() -> TaskPodConfig {
         TaskPodConfig {
@@ -536,13 +546,7 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
-        // TODO: Clean DB code
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
+        let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
         let mut sched = Scheduler { pool };
 
@@ -603,13 +607,7 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
-        // TODO: Clean DB code
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
+        let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
         let mut sched = Scheduler { pool };
 
