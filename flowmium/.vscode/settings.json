@@ -5,6 +5,7 @@
         "creds",
         "dependee",
         "flowmium",
+        "minio",
         "openapi",
         "peekable",
         "sched",

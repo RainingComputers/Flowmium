@@ -79,7 +79,7 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
 }
 
 #[tracing::instrument]
-async fn task_main(taks_opts: TaskOpts) -> ExitCode {
+async fn task_main(task_opts: TaskOpts) -> ExitCode {
     let config: SidecarConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
         Err(error) => {
@@ -88,7 +88,7 @@ async fn task_main(taks_opts: TaskOpts) -> ExitCode {
         }
     };
 
-    return run_task(config, taks_opts.cmd).await;
+    return run_task(config, task_opts.cmd).await;
 }
 
 #[tokio::main]

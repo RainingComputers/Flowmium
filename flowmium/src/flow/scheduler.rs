@@ -1,5 +1,5 @@
-use std::collections::BTreeSet;
 use sqlx::{Pool, Postgres};
+use std::collections::BTreeSet;
 
 use super::{errors::FlowError, model::Task};
 
@@ -93,8 +93,17 @@ impl Scheduler {
         return Ok(id);
     }
 
+    pub fn check_rows_updated(flow_id: i32, rows_updated: u64) -> Result<(), FlowError> {
+        if rows_updated != 1 {
+            tracing::error!("Flow with id {} does not exist", flow_id);
+            return Err(FlowError::FlowDoesNotExistError);
+        }
+
+        Ok(())
+    }
+
     pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
-        if let Err(error) = sqlx::query!(
+        let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_append(running_tasks, $1)
@@ -106,11 +115,14 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
-            return Err(FlowError::DatabaseQueryError);
+            Ok(result) => result.rows_affected(),
+            Err(error) => {
+                tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
-        return Ok(());
+        Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
     pub async fn mark_task_finished(
@@ -118,7 +130,7 @@ impl Scheduler {
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), FlowError> {
-        if let Err(error) = sqlx::query!(
+        let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_remove(running_tasks, $1),
@@ -136,15 +148,20 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
-            return Err(FlowError::DatabaseQueryError);
-        }; // TODO: check if one row was updated
+            Ok(result) => {
+               result.rows_affected()
+            },
+            Err(error) => {
+                tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
+                return Err(FlowError::DatabaseQueryError);
+            }
+        };
 
-        return Ok(());
+        Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
     pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
-        if let Err(error) = sqlx::query!(
+        let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
             SET running_tasks = array_remove(running_tasks, $1),
@@ -158,11 +175,14 @@ impl Scheduler {
         .execute(&self.pool)
         .await
         {
-            tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
-            return Err(FlowError::DatabaseQueryError);
+            Ok(result) => result.rows_affected(),
+            Err(error) => {
+                tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
+                return Err(FlowError::DatabaseQueryError);
+            }
         };
 
-        return Ok(());
+        Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
     pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, FlowError> {
@@ -194,7 +214,10 @@ impl Scheduler {
         return Ok(flows);
     }
 
-    fn record_to_tasks(task_id_list: Option<serde_json::Value>, tasks: serde_json::Value) -> Option<Vec<(i32, Task)>> {
+    fn record_to_tasks(
+        task_id_list: Option<serde_json::Value>,
+        tasks: serde_json::Value,
+    ) -> Option<Vec<(i32, Task)>> {
         let Ok(task_ids) = serde_json::from_value::<BTreeSet<i32>>(task_id_list?) else {
             return  None;
         };
@@ -414,52 +437,50 @@ mod tests {
         assert_eq!(scheduler.get_running_or_pending_flows().await, Ok(vec![]));
     }
 
-    // #[tokio::test]
-    // async fn test_scheduler_flow_does_not_exist() {
-    //     // TODO: Clean DB code
-    //     let pool = PgPoolOptions::new()
-    //         .max_connections(5)
-    //         .connect("postgres://flowmium:flowmium@localhost/flowmium")
-    //         .await
-    //         .unwrap();
+    #[tokio::test]
+    async fn test_scheduler_flow_does_not_exist() {
+        let pool = get_test_pool().await;
 
-    //     let test_tasks_0 = vec![
-    //         create_fake_task("flow-0-task-0"),
-    //         create_fake_task("flow-0-task-1"),
-    //     ];
+        let test_tasks_0 = vec![
+            create_fake_task("flow-0-task-0"),
+            create_fake_task("flow-0-task-1"),
+        ];
 
-    //     let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+        let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-    //     let test_tasks_1 = vec![
-    //         create_fake_task("flow-1-task-0"),
-    //         create_fake_task("flow-1-task-1"),
-    //     ];
+        let test_tasks_1 = vec![
+            create_fake_task("flow-1-task-0"),
+            create_fake_task("flow-1-task-1"),
+        ];
 
-    //     let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+        let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-    //     let mut scheduler = Scheduler { pool };
+        let mut scheduler = Scheduler { pool };
 
-    //     scheduler.create_flow("flow-0".to_string(), test_plan_0, test_tasks_0);
-    //     scheduler.create_flow("flow-1".to_string(), test_plan_1, test_tasks_1);
+        let flow_id_0 = scheduler
+            .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
+            .await
+            .unwrap();
+        let _flow_id_1 = scheduler
+            .create_flow("flow-1".to_string(), test_plan_1, test_tasks_1)
+            .await
+            .unwrap();
 
-    //     assert_eq!(
-    //         scheduler.mark_task_running(1000, 0).await,
-    //         Err(FlowError::FlowDoesNotExistError)
-    //     );
+        assert_eq!(
+            scheduler.mark_task_running(flow_id_0 + 1000, 0).await,
+            Err(FlowError::FlowDoesNotExistError)
+        );
 
-    //     assert_eq!(
-    //         scheduler.mark_task_finished(1000, 0).await,
-    //         Err(FlowError::FlowDoesNotExistError)
-    //     );
+        assert_eq!(
+            scheduler.mark_task_finished(flow_id_0 + 1000, 0).await,
+            Err(FlowError::FlowDoesNotExistError)
+        );
 
-    //     assert_eq!(
-    //         scheduler.mark_task_failed(1000, 0).await,
-    //         Err(FlowError::FlowDoesNotExistError)
-    //     );
+        assert_eq!(
+            scheduler.mark_task_failed(flow_id_0 + 1000, 0).await,
+            Err(FlowError::FlowDoesNotExistError)
+        );
 
-    //     assert_eq!(
-    //         scheduler.schedule_tasks(1000).await,
-    //         Err(FlowError::FlowDoesNotExistError)
-    //     );
-    // }
+        assert_eq!(scheduler.schedule_tasks(flow_id_0 + 1000).await, Ok(None));
+    }
 }
