@@ -31,6 +31,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    #[tracing::instrument]
     pub async fn create_flow(
         &mut self,
         flow_name: String,
@@ -102,6 +103,7 @@ impl Scheduler {
         Ok(())
     }
 
+    #[tracing::instrument]
     pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
         let rows_updated = match sqlx::query!(
             r#"
@@ -125,6 +127,7 @@ impl Scheduler {
         Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
+    #[tracing::instrument]
     pub async fn mark_task_finished(
         &mut self,
         flow_id: i32,
@@ -160,6 +163,7 @@ impl Scheduler {
         Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
+    #[tracing::instrument]
     pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
         let rows_updated = match sqlx::query!(
             r#"
@@ -185,6 +189,7 @@ impl Scheduler {
         Scheduler::check_rows_updated(flow_id, rows_updated)
     }
 
+    #[tracing::instrument]
     pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, FlowError> {
         struct RunningPendingSelectQueryRecord {
             id: i32,

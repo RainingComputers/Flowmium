@@ -1,9 +1,8 @@
 use s3::{creds::Credentials, Bucket, Region};
-use tokio::fs;
+use tokio::{fs, io};
 
 use super::errors::ArtefactError;
 
-// TODO: create folders
 // TODO: create bucker on init
 
 pub fn get_bucket(
@@ -37,6 +36,18 @@ pub fn get_bucket(
     return Ok(bucket);
 }
 
+pub async fn create_parent_directories(local_path: &String) -> io::Result<()> {
+    let path = std::path::Path::new(&local_path);
+    let prefix = match path.parent() {
+        Some(parent) => parent,
+        None => {
+            return Ok(());
+        }
+    };
+
+    fs::create_dir_all(prefix).await
+}
+
 #[tracing::instrument(skip(bucket))]
 pub async fn download_input(
     bucket: &Bucket,
@@ -59,6 +70,11 @@ pub async fn download_input(
             response.status_code()
         );
         return Err(ArtefactError::UnableToDownloadInput);
+    }
+
+    if let Err(error) = create_parent_directories(&local_path).await {
+        tracing::error!(%error, "Unable to create parent directories for input");
+        return Err(ArtefactError::UnableToWriteInput);
     }
 
     if let std::io::Result::Err(error) = fs::write(local_path, &response.bytes()).await {

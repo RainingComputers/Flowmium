@@ -503,13 +503,13 @@ mod tests {
                     cmd: vec![
                         "sh".to_string(),
                         "-c".to_string(),
-                        "cat /task-e-output | sed 's/\\bGreetings\\b/Hello/g' > /hello-foobar"
+                        "cat /inputs/testing/task-e-output | sed 's/\\bGreetings\\b/Hello/g' > /hello-foobar"
                             .to_string(),
                     ],
                     env: vec![],
                     inputs: Some(vec![Input {
                         from: "OutputFromTaskE".to_string(),
-                        path: "/task-e-output".to_string(),
+                        path: "/inputs/testing/task-e-output".to_string(),
                     }]),
                     outputs: Some(vec![Output {
                         name: "OutputFromTaskD".to_string(),
