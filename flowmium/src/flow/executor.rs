@@ -370,7 +370,10 @@ mod tests {
     use serial_test::serial;
     use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
-    use crate::flow::model::{Input, Output};
+    use crate::{
+        artefacts::bucket::get_bucket,
+        flow::model::{Input, Output},
+    };
 
     use super::*;
 
@@ -403,6 +406,25 @@ mod tests {
             .delete_collection(&DeleteParams::default(), &ListParams::default())
             .await
             .unwrap();
+    }
+
+    async fn delete_all_objects(config: &ExecutorConfig) {
+        let bucket = get_bucket(
+            &config.pod_config.access_key,
+            &config.pod_config.secret_key,
+            &config.pod_config.bucket_name,
+            config.pod_config.store_url.clone(),
+        )
+        .unwrap();
+
+        let object_list = bucket
+            .list("/".to_string(), Some("/".to_string()))
+            .await
+            .unwrap();
+
+        for obj in object_list {
+            bucket.delete_object(obj.prefix.unwrap()).await.unwrap();
+        }
     }
 
     async fn delete_all_jobs() {
@@ -543,12 +565,13 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_schedule_and_run_tasks() {
-        delete_all_pods().await;
-        delete_all_jobs().await;
-
         let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
         let mut sched = Scheduler { pool };
+
+        delete_all_pods().await;
+        delete_all_jobs().await;
+        delete_all_objects(&config).await;
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
