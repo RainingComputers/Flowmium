@@ -418,12 +418,17 @@ mod tests {
         .unwrap();
 
         let object_list = bucket
-            .list("/".to_string(), Some("/".to_string()))
+            .list("".to_string(), None)
             .await
-            .unwrap();
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .contents
+            .clone();
+
 
         for obj in object_list {
-            bucket.delete_object(obj.prefix.unwrap()).await.unwrap();
+            bucket.delete_object(obj.key).await.unwrap();
         }
     }
 
