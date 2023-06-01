@@ -32,6 +32,7 @@ rust-s3 = "0.32.3"
 gumdrop = "0.8.1"
 serde_json = "1.0.93"
 envy = "0.4.2"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 serial_test = "*"
