@@ -17,7 +17,7 @@ use serde::Deserialize;
 
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum ExecutorError {
     #[error("unable to spawn task")]
     UnableToSpawnTaskError,
@@ -708,9 +708,9 @@ mod tests {
             TaskStatus::Failed
         );
 
-        assert_eq!(
-            get_task_status(flow_id, 1, &config).await,
-            Err(ExecutorError::UnexpectedRunnerStateError)
-        );
+        match get_task_status(flow_id, 1, &config).await {
+            Err(ExecutorError::UnexpectedRunnerStateError) => (),
+            _ => panic!(),
+        }
     }
 }

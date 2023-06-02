@@ -5,16 +5,16 @@ use super::model::Task;
 
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum SchedulerError {
-    #[error("invalid stored value error")]
-    InvalidStoredValueError,
-    #[error("database query error")]
-    DatabaseQueryError,
-    #[error("flow does not exist error")]
-    FlowDoesNotExistError,
-    #[error("unable to serialize/deserialize JSON")]
-    SerializeDeserializeError,
+    #[error("invalid stored value error for flow {0}")]
+    InvalidStoredValueError(i32),
+    #[error("database query error {0}")]
+    DatabaseQueryError(#[from] sqlx::error::Error),
+    #[error("flow {0} does not exist error")]
+    FlowDoesNotExistError(i32),
+    #[error("unable to serialize/deserialize JSON {0}")]
+    SerializeDeserializeError(serde_json::Error),
 }
 
 #[derive(sqlx::Type, Debug, PartialEq)]
@@ -56,7 +56,7 @@ impl Scheduler {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize task definition to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserializeError);
+                return Err(SchedulerError::SerializeDeserializeError(error));
             }
         };
 
@@ -64,7 +64,7 @@ impl Scheduler {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize plan to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserializeError);
+                return Err(SchedulerError::SerializeDeserializeError(error));
             }
         };
 
@@ -101,7 +101,7 @@ impl Scheduler {
             Ok(id) => id,
             Err(error) => {
                 tracing::error!(%error, "Unable to create flow in database");
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -111,7 +111,7 @@ impl Scheduler {
     pub fn check_rows_updated(flow_id: i32, rows_updated: u64) -> Result<(), SchedulerError> {
         if rows_updated != 1 {
             tracing::error!("Flow with id {} does not exist", flow_id);
-            return Err(SchedulerError::FlowDoesNotExistError);
+            return Err(SchedulerError::FlowDoesNotExistError(flow_id));
         }
 
         Ok(())
@@ -138,7 +138,7 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -174,7 +174,7 @@ impl Scheduler {
             },
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -204,7 +204,7 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -236,7 +236,7 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch running or pending flows from database");
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -299,7 +299,7 @@ impl Scheduler {
             Ok(tasks) => tasks,
             Err(error)  => {
                 tracing::error!(%error, "Unable to fetch next stage from database");
-                return Err(SchedulerError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError(error));
             }
         };
 
@@ -309,7 +309,7 @@ impl Scheduler {
 
         let Some(stage_tasks) = stage_tasks_optional else {
             tracing::error!("Invalid record in database for flow {}", flow_id);
-            return Err(SchedulerError::InvalidStoredValueError);
+            return Err(SchedulerError::InvalidStoredValueError(flow_id));
         };
 
         return Ok(Some(stage_tasks));
@@ -322,7 +322,7 @@ mod tests {
     use serial_test::serial;
     use sqlx::postgres::PgPoolOptions;
 
-    use crate::flow::model::Task;
+    use crate::flow::model::{SecretRef, Task};
 
     use std::collections::BTreeSet;
 
@@ -397,75 +397,78 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await,
-            Ok(vec![(flow_id_0, vec![]), (flow_id_1, vec![])]),
+            scheduler.get_running_or_pending_flows().await.unwrap(),
+            vec![(flow_id_0, vec![]), (flow_id_1, vec![])],
         );
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0).await,
-            Ok(Some(vec![(0, create_fake_task("flow-0-task-0"))])),
+            scheduler.schedule_tasks(flow_id_0).await.unwrap(),
+            Some(vec![(0, create_fake_task("flow-0-task-0"))]),
         );
 
         scheduler.mark_task_running(flow_id_0, 0).await.unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
 
         scheduler.mark_task_finished(flow_id_0, 0).await.unwrap();
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0).await,
-            Ok(Some(vec![
+            scheduler.schedule_tasks(flow_id_0).await.unwrap(),
+            Some(vec![
                 (1, create_fake_task("flow-0-task-1")),
                 (2, create_fake_task("flow-0-task-2"))
-            ])),
+            ]),
         );
 
         scheduler.mark_task_running(flow_id_0, 1).await.unwrap();
         scheduler.mark_task_running(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await,
-            Ok(vec![(flow_id_0, vec![1, 2]), (flow_id_1, vec![])]),
+            scheduler.get_running_or_pending_flows().await.unwrap(),
+            vec![(flow_id_0, vec![1, 2]), (flow_id_1, vec![])],
         );
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
 
         scheduler.mark_task_finished(flow_id_0, 1).await.unwrap();
         scheduler.mark_task_finished(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_0).await,
-            Ok(Some(vec![(3, create_fake_task("flow-0-task-3")),])),
+            scheduler.schedule_tasks(flow_id_0).await.unwrap(),
+            Some(vec![(3, create_fake_task("flow-0-task-3")),]),
         );
 
         scheduler.mark_task_finished(flow_id_0, 3).await.unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_0).await, Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await,
-            Ok(vec![(flow_id_1, vec![])]),
+            scheduler.get_running_or_pending_flows().await.unwrap(),
+            vec![(flow_id_1, vec![])],
         );
 
         assert_eq!(
-            scheduler.schedule_tasks(flow_id_1).await,
-            Ok(Some(vec![(0, create_fake_task("flow-1-task-0"))])),
+            scheduler.schedule_tasks(flow_id_1).await.unwrap(),
+            Some(vec![(0, create_fake_task("flow-1-task-0"))]),
         );
 
         scheduler.mark_task_running(flow_id_1, 0).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await,
-            Ok(vec![(flow_id_1, vec![0])]),
+            scheduler.get_running_or_pending_flows().await.unwrap(),
+            vec![(flow_id_1, vec![0])],
         );
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_1).await.unwrap(), None);
 
         scheduler.mark_task_failed(flow_id_1, 0).await.unwrap();
 
-        assert_eq!(scheduler.schedule_tasks(flow_id_1).await, Ok(None));
+        assert_eq!(scheduler.schedule_tasks(flow_id_1).await.unwrap(), None);
 
-        assert_eq!(scheduler.get_running_or_pending_flows().await, Ok(vec![]));
+        assert_eq!(
+            scheduler.get_running_or_pending_flows().await.unwrap(),
+            vec![]
+        );
     }
 
     #[tokio::test]
@@ -497,21 +500,33 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            scheduler.mark_task_running(flow_id_0 + 1000, 0).await,
-            Err(SchedulerError::FlowDoesNotExistError)
+        let does_not_exist_id = flow_id_0 + 1000;
+
+        fn assert_flow_does_not_exist_error(result: Result<(), SchedulerError>, flow_id: i32) {
+            assert!(match result {
+                Err(SchedulerError::FlowDoesNotExistError(id)) => id == flow_id,
+                _ => false,
+            })
+        }
+
+        assert_flow_does_not_exist_error(
+            scheduler.mark_task_running(does_not_exist_id, 0).await,
+            does_not_exist_id,
+        );
+
+        assert_flow_does_not_exist_error(
+            scheduler.mark_task_finished(does_not_exist_id, 0).await,
+            does_not_exist_id,
+        );
+
+        assert_flow_does_not_exist_error(
+            scheduler.mark_task_failed(does_not_exist_id, 0).await,
+            does_not_exist_id,
         );
 
         assert_eq!(
-            scheduler.mark_task_finished(flow_id_0 + 1000, 0).await,
-            Err(SchedulerError::FlowDoesNotExistError)
+            scheduler.schedule_tasks(does_not_exist_id).await.unwrap(),
+            None
         );
-
-        assert_eq!(
-            scheduler.mark_task_failed(flow_id_0 + 1000, 0).await,
-            Err(SchedulerError::FlowDoesNotExistError)
-        );
-
-        assert_eq!(scheduler.schedule_tasks(flow_id_0 + 1000).await, Ok(None));
     }
 }
