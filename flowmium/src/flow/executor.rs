@@ -3,8 +3,8 @@ use super::model::EnvVar;
 use super::model::KeyValuePair;
 use super::model::SecretRef;
 use super::model::Task;
-use super::planner::PlannerError;
 use super::planner::construct_plan;
+use super::planner::PlannerError;
 use super::scheduler::Scheduler;
 use super::scheduler::SchedulerError;
 
@@ -446,12 +446,11 @@ mod tests {
             .contents
             .clone();
 
-
         for obj in object_list {
             bucket.delete_object(obj.key).await.unwrap();
         }
 
-        return  bucket;
+        return bucket;
     }
 
     async fn delete_all_jobs() {
@@ -465,10 +464,12 @@ mod tests {
             .unwrap();
     }
 
-    async fn get_contents(bucket:&Bucket, path: String) -> String {
+    async fn get_contents(bucket: &Bucket, path: String) -> String {
         let response_data = bucket.get_object(path).await.unwrap();
 
-        std::str::from_utf8(response_data.bytes()).unwrap().to_owned()
+        std::str::from_utf8(response_data.bytes())
+            .unwrap()
+            .to_owned()
     }
 
     fn test_flow() -> ContainerDAGFlow {
@@ -620,11 +621,26 @@ mod tests {
             )
         }
 
-        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskA", flow_id)).await, "Hello world Hello mars Hello foobar Greetings foobar\n");
-        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskB", flow_id)).await, "Hello world\n");
-        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskC", flow_id)).await, "Hello mars\n");
-        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskD", flow_id)).await, "Hello foobar\n");
-        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskE", flow_id)).await, "Greetings foobar\n");
+        assert_eq!(
+            get_contents(&bucket, format!("{}/OutputFromTaskA", flow_id)).await,
+            "Hello world Hello mars Hello foobar Greetings foobar\n"
+        );
+        assert_eq!(
+            get_contents(&bucket, format!("{}/OutputFromTaskB", flow_id)).await,
+            "Hello world\n"
+        );
+        assert_eq!(
+            get_contents(&bucket, format!("{}/OutputFromTaskC", flow_id)).await,
+            "Hello mars\n"
+        );
+        assert_eq!(
+            get_contents(&bucket, format!("{}/OutputFromTaskD", flow_id)).await,
+            "Hello foobar\n"
+        );
+        assert_eq!(
+            get_contents(&bucket, format!("{}/OutputFromTaskE", flow_id)).await,
+            "Greetings foobar\n"
+        );
     }
 
     fn test_flow_fail() -> ContainerDAGFlow {

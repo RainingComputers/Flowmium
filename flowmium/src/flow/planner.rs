@@ -4,18 +4,17 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum PlannerError {
-    #[error("cyclic depdencies found")]
-    CyclicDependenciesError,
-    #[error("dependent task does not exist")]
-    DependentTaskDoesNotExistError,
+    #[error("cyclic dependencies found at task {0}")]
+    CyclicDependenciesError(usize),
+    #[error("dependent task {0} does not exist")]
+    DependentTaskDoesNotExistError(String),
     #[error("output not unique")]
-    OutputNotUniqueError,
-    #[error("output not from parent")]
-    OutputNotFromParentError,
-    #[error("output does not exist")]
-    OutputDoesNotExistError,
+    OutputNotUniqueError(String),
+    #[error("input from {1} for task {0} not from a parent task")]
+    OutputNotFromParentError(String, String),
+    #[error("input from {1} for task {0} does not exist")]
+    OutputDoesNotExistError(String, String),
 }
-
 
 #[derive(PartialEq, Debug)]
 pub struct Node {
@@ -44,7 +43,7 @@ fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
 
         for dep in task.depends.iter() {
             let child_node_id = match task_id_map.get(&dep) {
-                None => return Err(PlannerError::DependentTaskDoesNotExistError),
+                None => return Err(PlannerError::DependentTaskDoesNotExistError(dep.clone())),
                 Some(id) => *id,
             };
 
@@ -63,17 +62,22 @@ fn is_cyclic_visit(
     node: &Node,
     discovered: &mut BTreeSet<usize>,
     finished: &mut BTreeSet<usize>,
-) -> bool {
+) -> Option<usize> {
     discovered.insert(node_id);
 
     for v in node.children.iter() {
         if discovered.contains(&v) {
-            return true;
+            return Some(*v);
         }
 
         if !finished.contains(&v) {
-            if is_cyclic_visit(nodes, *v, &nodes[*v], discovered, finished) {
-                return true;
+            match is_cyclic_visit(nodes, *v, &nodes[*v], discovered, finished) {
+                None => {
+                    continue;
+                }
+                Some(v) => {
+                    return Some(v);
+                }
             }
         }
     }
@@ -81,22 +85,27 @@ fn is_cyclic_visit(
     discovered.remove(&node_id);
     finished.insert(node_id);
 
-    return false;
+    return None;
 }
 
-fn is_cyclic(nodes: &Vec<Node>) -> bool {
+fn is_cyclic(nodes: &Vec<Node>) -> Option<usize> {
     let mut discovered = BTreeSet::new();
     let mut finished = BTreeSet::new();
 
     for (node_id, node) in nodes.iter().enumerate() {
         if !discovered.contains(&node_id) && !finished.contains(&node_id) {
-            if is_cyclic_visit(nodes, node_id, node, &mut discovered, &mut finished) {
-                return true;
+            match is_cyclic_visit(nodes, node_id, node, &mut discovered, &mut finished) {
+                None => {
+                    continue;
+                }
+                Some(v) => {
+                    return Some(v);
+                }
             }
         }
     }
 
-    return false;
+    return None;
 }
 
 fn node_depends_on_node(dependent: &Node, dependee_id: usize, nodes: &Vec<Node>) -> bool {
@@ -165,7 +174,7 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
         for outputs in &task.outputs {
             for output in outputs {
                 if let Some(_) = output_task_name_map.insert(&output.name, task_id) {
-                    return Err(PlannerError::OutputNotUniqueError);
+                    return Err(PlannerError::OutputNotUniqueError(output.name.clone()));
                 }
             }
         }
@@ -175,11 +184,14 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
         for inputs in &task.inputs {
             for input in inputs {
                 let Some(from_task_id) = output_task_name_map.get(&input.from) else {
-                    return Err(PlannerError::OutputDoesNotExistError);
+                    return Err(PlannerError::OutputDoesNotExistError(  task.name.clone(), input.from.clone()));
                 };
 
                 if !nodes[task_id].children.contains(from_task_id) {
-                    return Err(PlannerError::OutputNotFromParentError);
+                    return Err(PlannerError::OutputNotFromParentError(
+                        task.name.clone(),
+                        input.from.clone(),
+                    ));
                 }
             }
         }
@@ -191,8 +203,8 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
 pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, PlannerError> {
     let nodes = construct_nodes(tasks)?;
 
-    if is_cyclic(&nodes) {
-        return Err(PlannerError::CyclicDependenciesError);
+    if let Some(node_id) = is_cyclic(&nodes) {
+        return Err(PlannerError::CyclicDependenciesError(node_id));
     }
 
     valid_input_outputs(tasks, &nodes)?;
@@ -250,8 +262,8 @@ mod tests {
             },
         ];
 
-        assert_eq!(is_cyclic(&test_acyclic_nodes), false);
-        assert_eq!(is_cyclic(&test_cyclic_nodes), true);
+        assert_eq!(is_cyclic(&test_acyclic_nodes), None);
+        assert_eq!(is_cyclic(&test_cyclic_nodes), Some(0));
     }
 
     fn test_tasks() -> Vec<Task> {
@@ -400,7 +412,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputNotUniqueError);
+        let expected = Err(PlannerError::OutputNotUniqueError("foo".to_owned()));
         assert_eq!(actual, expected);
     }
 
@@ -438,7 +450,10 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputDoesNotExistError);
+        let expected = Err(PlannerError::OutputDoesNotExistError(
+            "B".to_owned(),
+            "doesNotExist".to_owned(),
+        ));
         assert_eq!(actual, expected);
     }
 
@@ -494,7 +509,10 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputNotFromParentError);
+        let expected = Err(PlannerError::OutputNotFromParentError(
+            "C".to_owned(),
+            "foo".to_owned(),
+        ));
         assert_eq!(actual, expected);
     }
 }

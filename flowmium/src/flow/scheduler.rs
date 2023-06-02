@@ -1,7 +1,7 @@
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
-use super::{ model::Task};
+use super::model::Task;
 
 use thiserror::Error;
 
@@ -14,10 +14,8 @@ pub enum SchedulerError {
     #[error("flow does not exist error")]
     FlowDoesNotExistError,
     #[error("unable to serialize/deserialize JSON")]
-    SerializeDeserializeError
+    SerializeDeserializeError,
 }
-
-
 
 #[derive(sqlx::Type, Debug, PartialEq)]
 #[sqlx(rename_all = "snake_case")]
@@ -120,7 +118,11 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
+    pub async fn mark_task_running(
+        &mut self,
+        flow_id: i32,
+        task_id: i32,
+    ) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -180,7 +182,11 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
+    pub async fn mark_task_failed(
+        &mut self,
+        flow_id: i32,
+        task_id: i32,
+    ) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -206,7 +212,9 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
+    pub async fn get_running_or_pending_flows(
+        &self,
+    ) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
         struct RunningPendingSelectQueryRecord {
             id: i32,
             running_tasks: Vec<i32>,
@@ -310,14 +318,13 @@ impl Scheduler {
 
 #[cfg(test)]
 mod tests {
-   
 
     use serial_test::serial;
     use sqlx::postgres::PgPoolOptions;
 
     use crate::flow::model::Task;
-   
-    use std::{collections::BTreeSet};
+
+    use std::collections::BTreeSet;
 
     use super::*;
 
