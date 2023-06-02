@@ -10,11 +10,11 @@ pub enum SchedulerError {
     #[error("invalid stored value error for flow {0}")]
     InvalidStoredValueError(i32),
     #[error("database query error {0}")]
-    DatabaseQueryError(#[from] sqlx::error::Error),
+    DatabaseQueryError(#[source] sqlx::error::Error),
     #[error("flow {0} does not exist error")]
     FlowDoesNotExistError(i32),
     #[error("unable to serialize/deserialize JSON {0}")]
-    SerializeDeserializeError(serde_json::Error),
+    SerializeDeserializeError(#[source] serde_json::Error),
 }
 
 #[derive(sqlx::Type, Debug, PartialEq)]
@@ -322,7 +322,7 @@ mod tests {
     use serial_test::serial;
     use sqlx::postgres::PgPoolOptions;
 
-    use crate::flow::model::{SecretRef, Task};
+    use crate::flow::model::Task;
 
     use std::collections::BTreeSet;
 

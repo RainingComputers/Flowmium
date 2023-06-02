@@ -14,7 +14,9 @@ pub fn get_bucket(
             Ok(creds) => creds,
             Err(error) => {
                 tracing::error!(%error, "Unable to create creds for bucket");
-                return Err(ArtefactError::UnableToOpenBucketError);
+                return Err(ArtefactError::UnableToOpenBucketError(
+                    s3::error::S3Error::Credentials(error),
+                ));
             }
         };
 
@@ -27,7 +29,7 @@ pub fn get_bucket(
         Ok(bucket) => bucket.with_path_style(),
         Err(error) => {
             tracing::error!(%error, "Unable to open bucket");
-            return Err(ArtefactError::UnableToOpenBucketError);
+            return Err(ArtefactError::UnableToOpenBucketError(error));
         }
     };
 
@@ -58,26 +60,28 @@ pub async fn download_input(
         Ok(response) => response,
         Err(error) => {
             tracing::error!(%error, "Could not download input");
-            return Err(ArtefactError::UnableToDownloadInput);
+            return Err(ArtefactError::UnableToDownloadInput(error));
         }
     };
 
-    if response.status_code() != 200 {
+    let status_code = response.status_code();
+
+    if status_code != 200 {
         tracing::error!(
             "Response was non ok code {} while downloading input",
-            response.status_code()
+            status_code
         );
-        return Err(ArtefactError::UnableToDownloadInput);
+        return Err(ArtefactError::UnableToDownloadInputApiError(status_code));
     }
 
     if let Err(error) = create_parent_directories(&local_path).await {
         tracing::error!(%error, "Unable to create parent directories for input");
-        return Err(ArtefactError::UnableToWriteInput);
+        return Err(ArtefactError::UnableToWriteInput(error));
     }
 
     if let std::io::Result::Err(error) = fs::write(local_path, &response.bytes()).await {
         tracing::error!(%error, "File error while downloading input");
-        return Err(ArtefactError::UnableToWriteInput);
+        return Err(ArtefactError::UnableToWriteInput(error));
     }
 
     return Ok(());
@@ -95,7 +99,7 @@ pub async fn upload_output(
         Ok(content) => content,
         Err(error) => {
             tracing::error!(%error, "File error while uploading output");
-            return Err(ArtefactError::UnableToReadOutput);
+            return Err(ArtefactError::UnableToReadOutput(error));
         }
     };
 
@@ -103,16 +107,18 @@ pub async fn upload_output(
         Ok(response) => response,
         Err(error) => {
             tracing::error!(%error, "Could not upload output");
-            return Err(ArtefactError::UnableToUploadArtifact);
+            return Err(ArtefactError::UnableToUploadArtifact(error));
         }
     };
 
-    if response.status_code() != 200 {
+    let status_cost = response.status_code();
+
+    if status_cost != 200 {
         tracing::error!(
             "Response was non ok code {} while uploading output",
-            response.status_code()
+            status_cost
         );
-        return Err(ArtefactError::UnableToUploadArtifact);
+        return Err(ArtefactError::UnableToUploadArtifactApiError(status_cost));
     }
 
     return Ok(());
