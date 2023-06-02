@@ -1,5 +1,21 @@
-use super::{errors::FlowError, model::Task};
+use super::model::Task;
 use std::collections::{btree_set::BTreeSet, BTreeMap};
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq)]
+pub enum PlannerError {
+    #[error("cyclic depdencies found")]
+    CyclicDependenciesError,
+    #[error("dependent task does not exist")]
+    DependentTaskDoesNotExistError,
+    #[error("output not unique")]
+    OutputNotUniqueError,
+    #[error("output not from parent")]
+    OutputNotFromParentError,
+    #[error("output does not exist")]
+    OutputDoesNotExistError,
+}
+
 
 #[derive(PartialEq, Debug)]
 pub struct Node {
@@ -16,7 +32,7 @@ fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
     return task_id_map;
 }
 
-fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, FlowError> {
+fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
     let task_id_map = construct_task_id_map(tasks);
 
     let mut nodes: Vec<Node> = vec![];
@@ -28,7 +44,7 @@ fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, FlowError> {
 
         for dep in task.depends.iter() {
             let child_node_id = match task_id_map.get(&dep) {
-                None => return Err(FlowError::DependentTaskDoesNotExistError),
+                None => return Err(PlannerError::DependentTaskDoesNotExistError),
                 Some(id) => *id,
             };
 
@@ -142,14 +158,14 @@ fn add_node_to_plan(
     plan.push(BTreeSet::from([node_id]));
 }
 
-fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowError> {
+fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), PlannerError> {
     let mut output_task_name_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (task_id, task) in tasks.iter().enumerate() {
         for outputs in &task.outputs {
             for output in outputs {
                 if let Some(_) = output_task_name_map.insert(&output.name, task_id) {
-                    return Err(FlowError::OutputNotUniqueError);
+                    return Err(PlannerError::OutputNotUniqueError);
                 }
             }
         }
@@ -159,11 +175,11 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowE
         for inputs in &task.inputs {
             for input in inputs {
                 let Some(from_task_id) = output_task_name_map.get(&input.from) else {
-                    return Err(FlowError::OutputDoesNotExistError);
+                    return Err(PlannerError::OutputDoesNotExistError);
                 };
 
                 if !nodes[task_id].children.contains(from_task_id) {
-                    return Err(FlowError::OutputNotFromParentError);
+                    return Err(PlannerError::OutputNotFromParentError);
                 }
             }
         }
@@ -172,11 +188,11 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), FlowE
     return Ok(());
 }
 
-pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, FlowError> {
+pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, PlannerError> {
     let nodes = construct_nodes(tasks)?;
 
     if is_cyclic(&nodes) {
-        return Err(FlowError::CyclicDependenciesError);
+        return Err(PlannerError::CyclicDependenciesError);
     }
 
     valid_input_outputs(tasks, &nodes)?;
@@ -384,7 +400,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(FlowError::OutputNotUniqueError);
+        let expected = Err(PlannerError::OutputNotUniqueError);
         assert_eq!(actual, expected);
     }
 
@@ -422,7 +438,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(FlowError::OutputDoesNotExistError);
+        let expected = Err(PlannerError::OutputDoesNotExistError);
         assert_eq!(actual, expected);
     }
 
@@ -478,7 +494,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(FlowError::OutputNotFromParentError);
+        let expected = Err(PlannerError::OutputNotFromParentError);
         assert_eq!(actual, expected);
     }
 }

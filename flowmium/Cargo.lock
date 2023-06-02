@@ -515,6 +515,7 @@ dependencies = [
  "serde_yaml",
  "serial_test",
  "sqlx",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -1,7 +1,23 @@
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
-use super::{errors::FlowError, model::Task};
+use super::{ model::Task};
+
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq)]
+pub enum SchedulerError {
+    #[error("invalid stored value error")]
+    InvalidStoredValueError,
+    #[error("database query error")]
+    DatabaseQueryError,
+    #[error("flow does not exist error")]
+    FlowDoesNotExistError,
+    #[error("unable to serialize/deserialize JSON")]
+    SerializeDeserializeError
+}
+
+
 
 #[derive(sqlx::Type, Debug, PartialEq)]
 #[sqlx(rename_all = "snake_case")]
@@ -37,12 +53,12 @@ impl Scheduler {
         flow_name: String,
         plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
-    ) -> Result<i32, FlowError> {
+    ) -> Result<i32, SchedulerError> {
         let task_definitions_json = match serde_json::to_value(task_definitions) {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize task definition to JSON while creating flow");
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::SerializeDeserializeError);
             }
         };
 
@@ -50,7 +66,7 @@ impl Scheduler {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize plan to JSON while creating flow");
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::SerializeDeserializeError);
             }
         };
 
@@ -87,24 +103,24 @@ impl Scheduler {
             Ok(id) => id,
             Err(error) => {
                 tracing::error!(%error, "Unable to create flow in database");
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
         return Ok(id);
     }
 
-    pub fn check_rows_updated(flow_id: i32, rows_updated: u64) -> Result<(), FlowError> {
+    pub fn check_rows_updated(flow_id: i32, rows_updated: u64) -> Result<(), SchedulerError> {
         if rows_updated != 1 {
             tracing::error!("Flow with id {} does not exist", flow_id);
-            return Err(FlowError::FlowDoesNotExistError);
+            return Err(SchedulerError::FlowDoesNotExistError);
         }
 
         Ok(())
     }
 
     #[tracing::instrument]
-    pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
+    pub async fn mark_task_running(&mut self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -120,7 +136,7 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
@@ -132,7 +148,7 @@ impl Scheduler {
         &mut self,
         flow_id: i32,
         task_id: i32,
-    ) -> Result<(), FlowError> {
+    ) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -156,7 +172,7 @@ impl Scheduler {
             },
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
@@ -164,7 +180,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), FlowError> {
+    pub async fn mark_task_failed(&mut self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -182,7 +198,7 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
@@ -190,7 +206,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, FlowError> {
+    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
         struct RunningPendingSelectQueryRecord {
             id: i32,
             running_tasks: Vec<i32>,
@@ -212,7 +228,7 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch running or pending flows from database");
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
@@ -245,7 +261,7 @@ impl Scheduler {
     pub async fn schedule_tasks<'a>(
         &'a mut self,
         flow_id: i32,
-    ) -> Result<Option<Vec<(i32, Task)>>, FlowError> {
+    ) -> Result<Option<Vec<(i32, Task)>>, SchedulerError> {
         let record_optional = match sqlx::query!(
             r#"
             WITH updated AS (
@@ -275,7 +291,7 @@ impl Scheduler {
             Ok(tasks) => tasks,
             Err(error)  => {
                 tracing::error!(%error, "Unable to fetch next stage from database");
-                return Err(FlowError::DatabaseQueryError);
+                return Err(SchedulerError::DatabaseQueryError);
             }
         };
 
@@ -285,7 +301,7 @@ impl Scheduler {
 
         let Some(stage_tasks) = stage_tasks_optional else {
             tracing::error!("Invalid record in database for flow {}", flow_id);
-            return Err(FlowError::InvalidStoredValueError);
+            return Err(SchedulerError::InvalidStoredValueError);
         };
 
         return Ok(Some(stage_tasks));
@@ -294,11 +310,14 @@ impl Scheduler {
 
 #[cfg(test)]
 mod tests {
+   
+
     use serial_test::serial;
     use sqlx::postgres::PgPoolOptions;
 
     use crate::flow::model::Task;
-    use std::collections::BTreeSet;
+   
+    use std::{collections::BTreeSet};
 
     use super::*;
 
@@ -473,17 +492,17 @@ mod tests {
 
         assert_eq!(
             scheduler.mark_task_running(flow_id_0 + 1000, 0).await,
-            Err(FlowError::FlowDoesNotExistError)
+            Err(SchedulerError::FlowDoesNotExistError)
         );
 
         assert_eq!(
             scheduler.mark_task_finished(flow_id_0 + 1000, 0).await,
-            Err(FlowError::FlowDoesNotExistError)
+            Err(SchedulerError::FlowDoesNotExistError)
         );
 
         assert_eq!(
             scheduler.mark_task_failed(flow_id_0 + 1000, 0).await,
-            Err(FlowError::FlowDoesNotExistError)
+            Err(SchedulerError::FlowDoesNotExistError)
         );
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0 + 1000).await, Ok(None));

@@ -10,6 +10,7 @@
         "peekable",
         "sched",
         "sqlx",
+        "thiserror",
         "timedout"
     ]
 }

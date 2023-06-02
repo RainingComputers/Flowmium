@@ -1,11 +1,12 @@
-use super::errors::FlowError;
 use super::model::ContainerDAGFlow;
 use super::model::EnvVar;
 use super::model::KeyValuePair;
 use super::model::SecretRef;
 use super::model::Task;
+use super::planner::PlannerError;
 use super::planner::construct_plan;
 use super::scheduler::Scheduler;
+use super::scheduler::SchedulerError;
 
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::{api::batch::v1::Job, serde_json};
@@ -13,6 +14,24 @@ use kube::api::ListParams;
 use kube::core::ObjectList;
 use kube::{api::PostParams, Api, Client};
 use serde::Deserialize;
+
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq)]
+pub enum ExecutorError {
+    #[error("unable to spawn task")]
+    UnableToSpawnTaskError,
+    #[error("unable connect to kubernetes")]
+    UnableToConnectToKubernetesError,
+    #[error("unexpected runner state")]
+    UnexpectedRunnerStateError,
+    #[error("invalid task definition")]
+    InvalidTaskDefinitionError,
+    #[error("unable to construct plan")]
+    UnableToConstructPlanError(#[from] PlannerError),
+    #[error("unable to create flow error")]
+    UnableToCreateFlowOrMarkTaskError(#[from] SchedulerError),
+}
 
 #[derive(Debug, PartialEq)]
 enum TaskStatus {
@@ -51,12 +70,12 @@ impl ExecutorConfig {
     }
 }
 
-async fn get_kubernetes_client() -> Result<Client, FlowError> {
+async fn get_kubernetes_client() -> Result<Client, ExecutorError> {
     match Client::try_default().await {
         Ok(client) => Ok(client),
         Err(error) => {
             tracing::error!(%error, "Unable to connect to kubernetes");
-            return Err(FlowError::UnableToConnectToKubernetesError);
+            return Err(ExecutorError::UnableToConnectToKubernetesError);
         }
     }
 }
@@ -124,7 +143,7 @@ async fn spawn_task(
     task_id: i32,
     task: &Task,
     config: &ExecutorConfig,
-) -> Result<Job, FlowError> {
+) -> Result<Job, ExecutorError> {
     tracing::info!("Spawning task");
 
     let client = get_kubernetes_client().await?;
@@ -135,7 +154,7 @@ async fn spawn_task(
         Ok(string) => string,
         Err(error) => {
             tracing::error!(%error, "Unable to serialize input");
-            return Err(FlowError::InvalidTaskDefinitionError);
+            return Err(ExecutorError::InvalidTaskDefinitionError);
         }
     };
 
@@ -143,7 +162,7 @@ async fn spawn_task(
         Ok(string) => string,
         Err(error) => {
             tracing::error!(%error, "Unable to serialize output");
-            return Err(FlowError::InvalidTaskDefinitionError);
+            return Err(ExecutorError::InvalidTaskDefinitionError);
         }
     };
 
@@ -208,7 +227,7 @@ async fn spawn_task(
         Ok(job) => Ok(job),
         Err(error) => {
             tracing::error!(%error, "Unable to spawn job");
-            Err(FlowError::UnableToSpawnTaskError)
+            Err(ExecutorError::UnableToSpawnTaskError)
         }
     }
 }
@@ -218,7 +237,7 @@ async fn list_pods(
     flow_id: i32,
     task_id: i32,
     config: &ExecutorConfig,
-) -> Result<ObjectList<Pod>, FlowError> {
+) -> Result<ObjectList<Pod>, ExecutorError> {
     let client = get_kubernetes_client().await?;
 
     let pods_api: Api<Pod> = Api::namespaced(client, &config.namespace);
@@ -235,7 +254,7 @@ async fn list_pods(
         Ok(list) => list,
         Err(error) => {
             tracing::error!(%error, "Unable to list pods");
-            return Err(FlowError::UnableToConnectToKubernetesError);
+            return Err(ExecutorError::UnableToConnectToKubernetesError);
         }
     };
 
@@ -265,23 +284,23 @@ async fn get_task_status(
     flow_id: i32,
     task_id: i32,
     config: &ExecutorConfig,
-) -> Result<TaskStatus, FlowError> {
+) -> Result<TaskStatus, ExecutorError> {
     let pod_list = list_pods(flow_id, task_id, config).await?;
     let mut pod_iter = pod_list.iter();
 
     let Some(pod) = pod_iter.next() else {
         tracing::error!("Cannot find corresponding pod for task");
-        return Err(FlowError::UnexpectedRunnerStateError);
+        return Err(ExecutorError::UnexpectedRunnerStateError);
     };
 
     if pod_iter.peekable().peek().is_some() {
         tracing::error!("Found duplicate pod for task");
-        return Err(FlowError::UnexpectedRunnerStateError);
+        return Err(ExecutorError::UnexpectedRunnerStateError);
     }
 
     let Some(phase) = get_pod_phase(pod.to_owned()) else {
         tracing::error!("Unable to fetch status for pod");
-        return Err(FlowError::UnexpectedRunnerStateError)
+        return Err(ExecutorError::UnexpectedRunnerStateError)
     };
 
     let status = phase_to_task_status(phase);
@@ -292,7 +311,7 @@ async fn get_task_status(
 pub async fn instantiate_flow(
     flow: ContainerDAGFlow,
     sched: &mut Scheduler,
-) -> Result<i32, FlowError> {
+) -> Result<i32, ExecutorError> {
     let plan = construct_plan(&flow.tasks)?;
 
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
@@ -306,7 +325,7 @@ async fn sched_pending_tasks(
     sched: &mut Scheduler,
     flow_id: i32,
     config: &ExecutorConfig,
-) -> Result<bool, FlowError> {
+) -> Result<bool, ExecutorError> {
     let option_tasks = sched.schedule_tasks(flow_id).await?;
 
     if let Some(tasks) = option_tasks {
@@ -329,7 +348,7 @@ async fn mark_running_tasks(
     flow_id: i32,
     task_id: i32,
     config: &ExecutorConfig,
-) -> Result<(), FlowError> {
+) -> Result<(), SchedulerError> {
     let status = match get_task_status(flow_id, task_id, config).await {
         Ok(status) => status,
         Err(_) => return sched.mark_task_failed(flow_id, task_id).await,
@@ -675,7 +694,7 @@ mod tests {
 
         assert_eq!(
             get_task_status(flow_id, 1, &config).await,
-            Err(FlowError::UnexpectedRunnerStateError)
+            Err(ExecutorError::UnexpectedRunnerStateError)
         );
     }
 }
