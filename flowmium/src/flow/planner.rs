@@ -8,11 +8,11 @@ pub enum PlannerError {
     CyclicDependenciesError(usize),
     #[error("dependent task {0} does not exist")]
     DependentTaskDoesNotExistError(String),
-    #[error("output not unique")]
+    #[error("output {0} not unique")]
     OutputNotUniqueError(String),
-    #[error("input from {1} for task {0} not from a parent task")]
+    #[error("input ref {1} for task {0} not from a parent task")]
     OutputNotFromParentError(String, String),
-    #[error("input from {1} for task {0} does not exist")]
+    #[error("input ref {1} for task {0} does not exist")]
     OutputDoesNotExistError(String, String),
 }
 
