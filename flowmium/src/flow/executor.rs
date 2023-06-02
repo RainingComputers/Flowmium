@@ -367,6 +367,7 @@ mod tests {
     use std::time::Duration;
 
     use kube::api::DeleteParams;
+    use s3::Bucket;
     use serial_test::serial;
     use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
@@ -408,7 +409,7 @@ mod tests {
             .unwrap();
     }
 
-    async fn delete_all_objects(config: &ExecutorConfig) {
+    async fn delete_all_objects(config: &ExecutorConfig) -> Bucket {
         let bucket = get_bucket(
             &config.pod_config.access_key,
             &config.pod_config.secret_key,
@@ -430,6 +431,8 @@ mod tests {
         for obj in object_list {
             bucket.delete_object(obj.key).await.unwrap();
         }
+
+        return  bucket;
     }
 
     async fn delete_all_jobs() {
@@ -441,6 +444,12 @@ mod tests {
             .delete_collection(&DeleteParams::default(), &ListParams::default())
             .await
             .unwrap();
+    }
+
+    async fn get_contents(bucket:&Bucket, path: String) -> String {
+        let response_data = bucket.get_object(path).await.unwrap();
+
+        std::str::from_utf8(response_data.bytes()).unwrap().to_owned()
     }
 
     fn test_flow() -> ContainerDAGFlow {
@@ -576,7 +585,7 @@ mod tests {
 
         delete_all_pods().await;
         delete_all_jobs().await;
-        delete_all_objects(&config).await;
+        let bucket = delete_all_objects(&config).await;
 
         let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
 
@@ -591,6 +600,12 @@ mod tests {
                 TaskStatus::Finished
             )
         }
+
+        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskA", flow_id)).await, "Hello world Hello mars Hello foobar Greetings foobar\n");
+        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskB", flow_id)).await, "Hello world\n");
+        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskC", flow_id)).await, "Hello mars\n");
+        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskD", flow_id)).await, "Hello foobar\n");
+        assert_eq!(get_contents(&bucket, format!("{}/OutputFromTaskE", flow_id)).await, "Greetings foobar\n");
     }
 
     fn test_flow_fail() -> ContainerDAGFlow {
