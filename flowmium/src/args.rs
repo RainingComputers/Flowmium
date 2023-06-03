@@ -15,8 +15,10 @@ pub enum Command {
     Init(InitOpts),
     #[options(help = "Run flowmium task")]
     Task(TaskOpts),
-    #[options(help = "Execute DAG flows")]
+    #[options(help = "Execute DAG flows on cluster without a server")]
     Execute(ExecuteOpts),
+    #[options(help = "Run flowmium API server")]
+    Server(ServerOpts),
 }
 
 #[derive(Debug, Options)]
@@ -40,4 +42,10 @@ pub struct InitOpts {
 pub struct ExecuteOpts {
     #[options(free, help = "List of DAG flow definition")]
     pub files: Vec<String>,
+}
+
+#[derive(Debug, Options)]
+pub struct ServerOpts {
+    #[options(free, help = "Port for the server API")]
+    pub port: u16,
 }

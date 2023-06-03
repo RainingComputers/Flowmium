@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "actix",
         "artefacts",
         "backoff",
         "creds",
@@ -9,6 +10,7 @@
         "openapi",
         "peekable",
         "sched",
+        "serde",
         "sqlx",
         "thiserror",
         "timedout"

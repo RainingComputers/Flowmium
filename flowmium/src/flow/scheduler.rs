@@ -39,7 +39,7 @@ enum FlowStatus {
 //     status: FlowStatus,
 // }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scheduler {
     pub pool: Pool<Postgres>,
 }
@@ -47,7 +47,7 @@ pub struct Scheduler {
 impl Scheduler {
     #[tracing::instrument]
     pub async fn create_flow(
-        &mut self,
+        &self,
         flow_name: String,
         plan: Vec<BTreeSet<usize>>,
         task_definitions: Vec<Task>,
@@ -119,7 +119,7 @@ impl Scheduler {
 
     #[tracing::instrument]
     pub async fn mark_task_running(
-        &mut self,
+        &self,
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), SchedulerError> {
@@ -147,7 +147,7 @@ impl Scheduler {
 
     #[tracing::instrument]
     pub async fn mark_task_finished(
-        &mut self,
+        &self,
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), SchedulerError> {
@@ -182,11 +182,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn mark_task_failed(
-        &mut self,
-        flow_id: i32,
-        task_id: i32,
-    ) -> Result<(), SchedulerError> {
+    pub async fn mark_task_failed(&self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -267,7 +263,7 @@ impl Scheduler {
 
     #[tracing::instrument]
     pub async fn schedule_tasks<'a>(
-        &'a mut self,
+        &'a self,
         flow_id: i32,
     ) -> Result<Option<Vec<(i32, Task)>>, SchedulerError> {
         let record_optional = match sqlx::query!(
@@ -385,7 +381,7 @@ mod tests {
             BTreeSet::from([2]),
         ];
 
-        let mut scheduler = Scheduler { pool };
+        let scheduler = Scheduler { pool };
 
         let flow_id_0 = scheduler
             .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
@@ -489,7 +485,7 @@ mod tests {
 
         let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-        let mut scheduler = Scheduler { pool };
+        let scheduler = Scheduler { pool };
 
         let flow_id_0 = scheduler
             .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)

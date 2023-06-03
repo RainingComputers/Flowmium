@@ -1,5 +1,5 @@
-use super::model::ContainerDAGFlow;
 use super::model::EnvVar;
+use super::model::Flow;
 use super::model::KeyValuePair;
 use super::model::SecretRef;
 use super::model::Task;
@@ -50,7 +50,7 @@ enum TaskStatus {
     Unknown,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Clone)]
 pub struct TaskPodConfig {
     store_url: String,
     bucket_name: String,
@@ -59,7 +59,7 @@ pub struct TaskPodConfig {
     executor_image: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ExecutorConfig {
     namespace: String,
     flow_id_label: String,
@@ -287,6 +287,7 @@ fn phase_to_task_status(phase: String) -> TaskStatus {
     }
 }
 
+// TODO: Batch these requests
 #[tracing::instrument(skip(config))]
 async fn get_task_status(
     flow_id: i32,
@@ -316,10 +317,7 @@ async fn get_task_status(
 }
 
 #[tracing::instrument(skip(sched, flow))]
-pub async fn instantiate_flow(
-    flow: ContainerDAGFlow,
-    sched: &mut Scheduler,
-) -> Result<i32, ExecutorError> {
+pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, ExecutorError> {
     let plan = construct_plan(&flow.tasks)?;
 
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
@@ -330,7 +328,7 @@ pub async fn instantiate_flow(
 
 #[tracing::instrument(skip(sched, config))]
 async fn sched_pending_tasks(
-    sched: &mut Scheduler,
+    sched: &Scheduler,
     flow_id: i32,
     config: &ExecutorConfig,
 ) -> Result<bool, ExecutorError> {
@@ -352,7 +350,7 @@ async fn sched_pending_tasks(
 
 #[tracing::instrument(skip(sched, config))]
 async fn mark_running_tasks(
-    sched: &mut Scheduler,
+    sched: &Scheduler,
     flow_id: i32,
     task_id: i32,
     config: &ExecutorConfig,
@@ -370,7 +368,7 @@ async fn mark_running_tasks(
 }
 
 #[tracing::instrument(skip(sched))]
-pub async fn schedule_and_run_tasks(sched: &mut Scheduler, config: &ExecutorConfig) {
+pub async fn schedule_and_run_tasks(sched: &Scheduler, config: &ExecutorConfig) {
     if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows().await {
         for (flow_id, running_tasks) in tasks_to_schedule {
             match sched_pending_tasks(sched, flow_id, &config).await {
@@ -480,8 +478,8 @@ mod tests {
             .to_owned()
     }
 
-    fn test_flow() -> ContainerDAGFlow {
-        ContainerDAGFlow {
+    fn test_flow() -> Flow {
+        Flow {
             name: "hello-world".to_owned(),
             schedule: Some("".to_owned()),
             tasks: vec![
@@ -609,17 +607,17 @@ mod tests {
     async fn test_schedule_and_run_tasks() {
         let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler { pool };
+        let sched = Scheduler { pool };
 
         delete_all_pods().await;
         delete_all_jobs().await;
         let bucket = delete_all_objects(&config).await;
 
-        let flow_id = instantiate_flow(test_flow(), &mut sched).await.unwrap();
+        let flow_id = instantiate_flow(test_flow(), &sched).await.unwrap();
 
         for _ in 0..50 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&mut sched, &config).await;
+            schedule_and_run_tasks(&sched, &config).await;
         }
 
         for task_id in 0..5 {
@@ -651,8 +649,8 @@ mod tests {
         );
     }
 
-    fn test_flow_fail() -> ContainerDAGFlow {
-        ContainerDAGFlow {
+    fn test_flow_fail() -> Flow {
+        Flow {
             name: "hello-world".to_owned(),
             schedule: Some("".to_owned()),
             tasks: vec![
@@ -695,15 +693,13 @@ mod tests {
 
         let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let mut sched = Scheduler { pool };
+        let sched = Scheduler { pool };
 
-        let flow_id = instantiate_flow(test_flow_fail(), &mut sched)
-            .await
-            .unwrap();
+        let flow_id = instantiate_flow(test_flow_fail(), &sched).await.unwrap();
 
         for _ in 0..30 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&mut sched, &config).await;
+            schedule_and_run_tasks(&sched, &config).await;
         }
 
         assert_eq!(

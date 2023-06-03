@@ -52,23 +52,10 @@ pub struct Task {
 
 // TODO: Add kubernetes config
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ContainerDAGFlow {
+pub struct Flow {
     pub name: String,
     pub schedule: Option<String>,
     pub tasks: Vec<Task>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct PythonFlow {
-    pub image: String,
-    pub registry: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-#[serde(untagged)]
-pub enum Flow {
-    ContainerDAGJob(ContainerDAGFlow),
-    PythonJob(PythonFlow),
 }
 
 #[cfg(test)]
@@ -102,7 +89,7 @@ mod tests {
 
         let job: Flow = serde_yaml::from_str(serialized).unwrap();
 
-        let job_expected = Flow::ContainerDAGJob(ContainerDAGFlow {
+        let job_expected = Flow {
             name: "hello-world".to_owned(),
             schedule: Some("".to_owned()),
             tasks: vec![Task {
@@ -133,7 +120,7 @@ mod tests {
                     path: "/some/random/output/path".to_owned(),
                 }]),
             }],
-        });
+        };
 
         assert_eq!(job, job_expected);
     }
