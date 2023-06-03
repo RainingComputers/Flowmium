@@ -29,12 +29,12 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 sqlx = {  version = "0.6", features = ["postgres", "runtime-tokio-native-tls", "migrate", "json"] }
 rust-s3 = "0.32.3"
-gumdrop = "0.8.1"
 serde_json = "1.0.93"
 envy = "0.4.2"
 openssl = { version = "0.10", features = ["vendored"] }
 thiserror = "1.0.40"
 actix-web = "4"
+argh = "0.1.10"
 
 [dev-dependencies]
 serial_test = "*"

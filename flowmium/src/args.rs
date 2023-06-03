@@ -1,51 +1,56 @@
-use gumdrop::Options;
+use argh::FromArgs;
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+/// Flowmium, workflow orchestrator written in rust
 pub struct FlowmiumOptions {
-    #[options(help = "Print help message")]
-    pub help: bool,
-
-    #[options(command, required)]
-    pub command: Option<Command>,
+    #[argh(subcommand)]
+    pub command: Command,
 }
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
 pub enum Command {
-    #[options(help = "Run flowmium main")]
     Init(InitOpts),
-    #[options(help = "Run flowmium task")]
     Task(TaskOpts),
-    #[options(help = "Execute DAG flows on cluster without a server")]
     Execute(ExecuteOpts),
-    #[options(help = "Run flowmium API server")]
     Server(ServerOpts),
 }
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "task")]
+/// Run flowmium task pod
 pub struct TaskOpts {
-    #[options(free, help = "Command for task")]
+    #[argh(positional)]
+    /// command for the task to run
     pub cmd: Vec<String>,
 }
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "init")]
+/// Run init container to copy the flowmium executable into the task container
 pub struct InitOpts {
-    #[options(free, help = "Path to flowmium executable in the container")]
+    #[argh(positional)]
+    /// source of the flowmium executable in the init container
     pub src: String,
-    #[options(
-        free,
-        help = "Destination path of the volume to copy the executable to"
-    )]
+    #[argh(positional)]
+    /// shared volume destination to where the flowmium executable should be copied
     pub dest: String,
 }
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "execute")]
+/// Run YAML dag job with a temporary local executor without the API server
 pub struct ExecuteOpts {
-    #[options(free, help = "List of DAG flow definition")]
+    #[argh(positional)]
+    /// list of paths to YAML files containing flow definitions
     pub files: Vec<String>,
 }
 
-#[derive(Debug, Options)]
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "server")]
+/// Start executor server
 pub struct ServerOpts {
-    #[options(free, help = "Port for the server API")]
+    #[argh(option)]
+    /// port for the API server
     pub port: u16,
 }

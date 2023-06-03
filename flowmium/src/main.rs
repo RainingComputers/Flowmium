@@ -13,13 +13,12 @@ use pool::{init_db_and_get_pool, PostgresConfig};
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
-use args::{ExecuteOpts, FlowmiumOptions, ServerOpts, TaskOpts};
+use args::{ExecuteOpts, ServerOpts, TaskOpts};
 use flow::{
     executor::{instantiate_flow, schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
     model::Flow,
     scheduler::Scheduler,
 };
-use gumdrop::Options;
 
 async fn get_scheduler() -> Option<Scheduler> {
     let database_config: PostgresConfig = match envy::prefixed("FLOWMIUM_").from_env() {
@@ -97,6 +96,7 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
     }
 }
 
+#[tracing::instrument]
 async fn run_server(server_opts: ServerOpts) -> ExitCode {
     let Some(sched) = get_scheduler().await else {
         return  ExitCode::FAILURE;
@@ -106,18 +106,25 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return  ExitCode::FAILURE;
     };
 
-    if let Err(error) = start_server(server_opts, sched.clone(), executor_config.clone()).await {
-        tracing::error!(%error, "Unable to start server");
-        return ExitCode::FAILURE;
-    }
+    let sched_loop = sched.clone();
+    let executor_config_loop = executor_config.clone();
+
+    tracing::info!("Starting scheduler loop");
 
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;
 
-            schedule_and_run_tasks(&sched, &executor_config).await;
+            schedule_and_run_tasks(&sched_loop, &executor_config_loop).await;
         }
     });
+
+    tracing::info!("Starting API server");
+
+    if let Err(error) = start_server(server_opts, sched, executor_config).await {
+        tracing::error!(%error, "Unable to start server");
+        return ExitCode::FAILURE;
+    }
 
     return ExitCode::SUCCESS;
 }
@@ -146,23 +153,9 @@ async fn main() -> ExitCode {
         }
     };
 
-    let args: Vec<String> = std::env::args().collect();
+    let args: args::FlowmiumOptions = argh::from_env();
 
-    let opts = match FlowmiumOptions::parse_args(&args[1..], gumdrop::ParsingStyle::StopAtFirstFree)
-    {
-        Ok(opts) => opts,
-        Err(error) => {
-            print!("{}", error);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let Some(opt) = opts.command else {
-        eprint!("Invalid sub command");
-        return  ExitCode::FAILURE;
-    };
-
-    match opt {
+    match args.command {
         args::Command::Init(init_opts) => do_init(init_opts.src, init_opts.dest).await,
         args::Command::Task(task_opts) => task_main(task_opts).await,
         args::Command::Execute(execute_opts) => execute_main(execute_opts).await,

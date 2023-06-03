@@ -178,7 +178,7 @@ async fn spawn_task(
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
-            "name": task.name,
+            "name": format!("flow-{}-task-{}", flow_id, task.name),
         },
         "spec": {
             "template": {

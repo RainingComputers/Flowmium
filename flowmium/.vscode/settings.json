@@ -1,18 +1,19 @@
 {
-    "cSpell.words": [
-        "actix",
-        "artefacts",
-        "backoff",
-        "creds",
-        "dependee",
-        "flowmium",
-        "minio",
-        "openapi",
-        "peekable",
-        "sched",
-        "serde",
-        "sqlx",
-        "thiserror",
-        "timedout"
-    ]
+  "cSpell.words": [
+    "actix",
+    "argh",
+    "artefacts",
+    "backoff",
+    "creds",
+    "dependee",
+    "flowmium",
+    "minio",
+    "openapi",
+    "peekable",
+    "sched",
+    "serde",
+    "sqlx",
+    "thiserror",
+    "timedout"
+  ]
 }

@@ -10,7 +10,7 @@ pub struct PostgresConfig {
 pub async fn init_db_and_get_pool(config: PostgresConfig) -> Option<Pool<Postgres>> {
     let pool = match PgPoolOptions::new()
         .max_connections(5)
-        .connect("postgres://flowmium:flowmium@localhost/flowmium")
+        .connect(&config.postgres_url)
         .await
     {
         Ok(pool) => pool,

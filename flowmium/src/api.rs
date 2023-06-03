@@ -1,13 +1,40 @@
-use actix_web::{post, web, App, HttpServer, Responder};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    post, web, App, HttpResponse, HttpServer,
+};
 
 use crate::{
     args::ServerOpts,
-    flow::{executor::ExecutorConfig, scheduler::Scheduler},
+    flow::{
+        executor::{instantiate_flow, ExecutorConfig, ExecutorError},
+        model::Flow,
+        scheduler::Scheduler,
+    },
 };
 
+impl actix_web::error::ResponseError for ExecutorError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code())
+            .insert_header(ContentType::html())
+            .body(self.to_string())
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            ExecutorError::UnableToConstructPlanError(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
 #[post("/job")]
-async fn create_job() -> impl Responder {
-    "Hello world!"
+async fn create_job(
+    flow: web::Json<Flow>,
+    sched: web::Data<Scheduler>,
+) -> Result<String, ExecutorError> {
+    instantiate_flow(flow.into_inner(), &sched)
+        .await
+        .map(|id| id.to_string())
 }
 
 pub async fn start_server(
