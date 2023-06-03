@@ -51,6 +51,13 @@ pub struct Task {
 }
 
 // TODO: Add kubernetes config
+// active_deadline_seconds: 34
+// affinity: 34
+// tolerations: 34
+// image_pull_secrets: 34
+// priority: 3
+// limits: 23
+// requests: 23
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Flow {
     pub name: String,

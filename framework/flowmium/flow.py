@@ -1,10 +1,11 @@
 import os
 import inspect
-import json
+from urllib.parse import urljoin
 import argparse
 from typing import Callable, Any
 from dataclasses import dataclass
-from flowmium import default_serialize
+from flowmium import serializers
+from flowmium.serializers import Serializer
 
 
 @dataclass
@@ -35,12 +36,6 @@ class Task:
 @dataclass
 class FlowContext:
     task_id: int
-
-
-@dataclass
-class Serializer:
-    dump: Callable[[Any, str], None]
-    load: Callable[[str], Any]
 
 
 class ArgDoesNotExist(Exception):
@@ -95,9 +90,7 @@ class Flow:
     def task(
         self,
         inputs: dict[str, Callable] = {},
-        serializer: Serializer = Serializer(
-            dump=default_serialize.dump, load=default_serialize.load
-        ),
+        serializer: Serializer = serializers.pkl,
     ) -> Callable:
         def task_decorator(task_func: Callable) -> Callable:
             task_name = Flow._get_task_name(task_func)
@@ -183,9 +176,19 @@ class Flow:
 
             self.run_task(flowctx)
         except KeyError:
+            import requests
+
             parser = argparse.ArgumentParser()
             parser.add_argument("--cmd", required=True, type=str, nargs="+")
             parser.add_argument("--image", required=True, type=str)
+            parser.add_argument("--flowmium-server", required=True, type=str)
+
             args = parser.parse_args()
 
-            print(json.dumps(self.get_dag_dict(args.image, args.cmd)))
+            resp = requests.post(
+                urljoin(args.flowmium_server, "/api/v1/job"),
+                json=self.get_dag_dict(args.image, args.cmd)
+            )
+
+            print(resp.status_code)
+            print(resp.text)

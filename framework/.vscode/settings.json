@@ -1,6 +1,7 @@
 {
-    "python.linting.flake8Enabled": true,
-    "python.linting.mypyEnabled": true,
-    "python.formatting.provider": "black",
-    "python.defaultInterpreterPath": "./.venv/bin/python"
+  "python.linting.flake8Enabled": true,
+  "python.linting.mypyEnabled": true,
+  "python.formatting.provider": "black",
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "cSpell.words": ["flowctx", "flowmium"]
 }
