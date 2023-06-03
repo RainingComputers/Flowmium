@@ -60,6 +60,7 @@ Run the below commands to run an [example python flow](framework/test.py)
 - [ ] Secrets in executor
 - [ ] Secrets in the framework
 - [ ] Remove credentials from logs
+- [ ] Environment variables in framework
 
 ### API
 
