@@ -51,42 +51,22 @@ Run the below commands to run an [example python flow](framework/test.py)
   python3 test.py --image registry:5000/py-flow-test:latest --cmd python3 test.py --flowmium-server http://localhost:8080
   ```
 
-## Draft design notes
+## TODO
 
-These designs are still in early stages, detailed documentation is yet to be done.
+### Features
 
-### Endpoints and job models
+- [] Workers in executor
+- [] Workers in the framework
+- [] Secrets in executor
+- [] Secrets in the framework
+- [] Remove credentials from logs
 
-- `POST /api/v1/job`
-- `GET /api/v1/job/` and `GET /api/v1/job/{name}`
-- `DELETE /api/v1/job/{name}`
-- `POST /api/v1/secret` and `PUT /api/v1/secret`
-- `GET /api/v1/secret/`
-- `DELETE /api/v1/secret`
-- Artifacts
+### API
 
-### Python framework design and usage example
-
-```python
-from flowmium import flow
-
-@flow.task()
-def foo1(context):
-    return 1
-
-@flow.task({'arg_1': foo1})
-def foo2(context, arg_1)
-    print(context.secrets)
-    return arg_1 + 1
-
-@flow.task({'arg_1': foo1}, workers=8)
-def foo3(context, arg_1)
-    print(context.worker_id)
-    return arg_1 + 2
-
-@flow.task(depends={'arg_1': foo2, 'arg_2': foo3}, secrets=[""], config={})
-def foo3(context, arg_1, arg_2)
-    return arg_1 * arg_2
-
-flow.run(name="", schedule="", secrets=[""], config={})
-```
+- [x] `POST /api/v1/job`
+- [] `GET /api/v1/job/` and `GET /api/v1/job/{name}`
+- [] `DELETE /api/v1/job/{name}`
+- [] `POST /api/v1/secret` and `PUT /api/v1/secret`
+- [] `GET /api/v1/secret/`
+- [] `DELETE /api/v1/secret`
+- [] Artifacts API
