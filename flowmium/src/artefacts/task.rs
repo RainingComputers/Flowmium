@@ -2,7 +2,7 @@ use s3::Bucket;
 use serde::Deserialize;
 use serde_json;
 
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 
 use crate::flow::model::{Input, Output};
 
@@ -50,6 +50,23 @@ pub struct SidecarConfig {
     store_url: String,
 }
 
+fn get_command(cmd: Vec<String>) -> Option<Command> {
+    if cmd.len() == 0 {
+        tracing::error!("Invalid command");
+        return None;
+    }
+
+    let mut command = Command::new(&cmd[0]);
+
+    if cmd.len() > 1 {
+        command.args(&cmd[1..]);
+    }
+
+    command.stdout(Stdio::inherit());
+
+    return Some(command);
+}
+
 #[tracing::instrument]
 pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     let option_inputs: Option<Vec<Input>> = match serde_json::from_str(&config.input_json) {
@@ -78,10 +95,13 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
         }
     }
 
+    let Some(mut command) = get_command(cmd) else {
+        tracing::error!("Invalid command");
+        return ExitCode::FAILURE;
+    };
+
     // TODO: Add timeout
-    // TODO: Print logs to console
-    // TODO: below line panics!
-    let task_output = match Command::new(&cmd[0]).args(&cmd[1..]).output() {
+    let task_output = match command.output() {
         Ok(task_output) => task_output,
         Err(error) => {
             tracing::error!(%error, "Failed to run task");
