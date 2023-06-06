@@ -20,7 +20,7 @@ pub enum Command {
 #[argh(subcommand, name = "task")]
 /// Run flowmium task pod
 pub struct TaskOpts {
-    #[argh(positional)]
+    #[argh(greedy, positional)]
     /// command for the task to run
     pub cmd: Vec<String>,
 }
@@ -41,7 +41,7 @@ pub struct InitOpts {
 #[argh(subcommand, name = "execute")]
 /// Run YAML dag job with a temporary local executor without the API server
 pub struct ExecuteOpts {
-    #[argh(positional)]
+    #[argh(greedy, positional)]
     /// list of paths to YAML files containing flow definitions
     pub files: Vec<String>,
 }

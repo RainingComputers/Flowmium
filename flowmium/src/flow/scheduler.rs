@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
@@ -17,7 +18,7 @@ pub enum SchedulerError {
     SerializeDeserializeError(#[source] serde_json::Error),
 }
 
-#[derive(sqlx::Type, Debug, PartialEq)]
+#[derive(sqlx::Type, Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[sqlx(rename_all = "snake_case")]
 enum FlowStatus {
     Pending,
@@ -26,18 +27,18 @@ enum FlowStatus {
     Failed,
 }
 
-// #[derive(Debug)]
-// pub struct FlowState {
-//     id: usize,
-//     plan: Vec<BTreeSet<usize>>,
-//     current_stage: usize,
-//     running_tasks: BTreeSet<usize>,
-//     finished_tasks: BTreeSet<usize>,
-//     failed_tasks: BTreeSet<usize>,
-//     task_definitions: Vec<Task>,
-//     flow_name: String,
-//     status: FlowStatus,
-// }
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct FlowRecord {
+    id: i32,
+    plan: serde_json::Value,
+    current_stage: i32,
+    running_tasks: Vec<i32>,
+    finished_tasks: Vec<i32>,
+    failed_tasks: Vec<i32>,
+    task_definitions: serde_json::Value,
+    flow_name: String,
+    status: FlowStatus,
+}
 
 #[derive(Debug, Clone)]
 pub struct Scheduler {
@@ -208,7 +209,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument]
-    pub async fn get_running_or_pending_flows(
+    pub async fn get_running_or_pending_flows_ids(
         &self,
     ) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
         struct RunningPendingSelectQueryRecord {
@@ -222,7 +223,8 @@ impl Scheduler {
             SELECT id, running_tasks
             FROM flows
             WHERE status IN ('running', 'pending')
-            ORDER BY id ASC;
+            ORDER BY id ASC
+            LIMIT 1000;
             "#
         )
         .map(|record| (record.id, record.running_tasks))
@@ -237,6 +239,95 @@ impl Scheduler {
         };
 
         return Ok(flows);
+    }
+
+    #[tracing::instrument]
+    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<FlowRecord>, SchedulerError> {
+        let flows = match sqlx::query_as!(
+            FlowRecord,
+            r#"
+            SELECT 
+                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks, 
+                task_definitions, flow_name, status AS "status: FlowStatus"
+            FROM flows
+            WHERE status IN ('running', 'pending')
+            ORDER BY id ASC
+            LIMIT 1000;
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(flows) => flows,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch running or pending flows from database");
+                return Err(SchedulerError::DatabaseQueryError(error));
+            }
+        };
+
+        return Ok(flows);
+    }
+
+    #[tracing::instrument]
+    pub async fn get_terminated_flows(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<FlowRecord>, SchedulerError> {
+        let flows = match sqlx::query_as!(
+            FlowRecord,
+            r#"
+            SELECT 
+                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks, 
+                task_definitions, flow_name, status AS "status: FlowStatus"
+            FROM flows
+            WHERE status IN ('success', 'failed')
+            ORDER BY id ASC
+            OFFSET $1
+            LIMIT $2;
+            "#,
+            offset,
+            limit,
+        )
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(flows) => flows,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch terminated flows from database");
+                return Err(SchedulerError::DatabaseQueryError(error));
+            }
+        };
+
+        return Ok(flows);
+    }
+
+    pub async fn get_flow(&self, id: i32) -> Result<FlowRecord, SchedulerError> {
+        let flow_optional = match sqlx::query_as!(
+            FlowRecord,
+            r#"
+            SELECT 
+                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks,
+                task_definitions, flow_name, status AS "status: FlowStatus"
+            FROM flows
+            WHERE id = $1
+            "#,
+            id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        {
+            Ok(flows) => flows,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch terminated flows from database");
+                return Err(SchedulerError::DatabaseQueryError(error));
+            }
+        };
+
+        match flow_optional {
+            None => Err(SchedulerError::FlowDoesNotExistError(id)),
+            Some(flow) => Ok(flow),
+        }
     }
 
     fn record_to_tasks(
@@ -393,7 +484,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await.unwrap(),
+            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![(flow_id_0, vec![]), (flow_id_1, vec![])],
         );
 
@@ -420,7 +511,7 @@ mod tests {
         scheduler.mark_task_running(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await.unwrap(),
+            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![(flow_id_0, vec![1, 2]), (flow_id_1, vec![])],
         );
 
@@ -439,7 +530,7 @@ mod tests {
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await.unwrap(),
+            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![(flow_id_1, vec![])],
         );
 
@@ -451,7 +542,7 @@ mod tests {
         scheduler.mark_task_running(flow_id_1, 0).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await.unwrap(),
+            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![(flow_id_1, vec![0])],
         );
 
@@ -462,7 +553,7 @@ mod tests {
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await.unwrap(), None);
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows().await.unwrap(),
+            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![]
         );
     }

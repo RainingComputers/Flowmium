@@ -369,7 +369,7 @@ async fn mark_running_tasks(
 
 #[tracing::instrument(skip(sched))]
 pub async fn schedule_and_run_tasks(sched: &Scheduler, config: &ExecutorConfig) {
-    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows().await {
+    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows_ids().await {
         for (flow_id, running_tasks) in tasks_to_schedule {
             match sched_pending_tasks(sched, flow_id, &config).await {
                 Ok(true) => continue,

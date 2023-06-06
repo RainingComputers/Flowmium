@@ -1,24 +1,16 @@
-use actix_web::{
-    http::{header::ContentType, StatusCode},
-    post, web, App, HttpResponse, HttpServer,
-};
+use actix_web::{get, http::StatusCode, post, web, App, HttpServer};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     args::ServerOpts,
     flow::{
         executor::{instantiate_flow, ExecutorConfig, ExecutorError},
         model::Flow,
-        scheduler::Scheduler,
+        scheduler::{FlowRecord, Scheduler, SchedulerError},
     },
 };
 
 impl actix_web::error::ResponseError for ExecutorError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
-            .insert_header(ContentType::html())
-            .body(self.to_string())
-    }
-
     fn status_code(&self) -> StatusCode {
         match *self {
             ExecutorError::UnableToConstructPlanError(_) => StatusCode::BAD_REQUEST,
@@ -35,6 +27,48 @@ async fn create_job(
     instantiate_flow(flow.into_inner(), &sched)
         .await
         .map(|id| id.to_string())
+}
+
+impl actix_web::error::ResponseError for SchedulerError {
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            SchedulerError::FlowDoesNotExistError(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+#[get("/job/running")]
+async fn get_running_jobs(
+    sched: web::Data<Scheduler>,
+) -> Result<web::Json<Vec<FlowRecord>>, SchedulerError> {
+    return sched.get_running_or_pending_flows().await.map(web::Json);
+}
+
+#[derive(Serialize, Deserialize)]
+struct OffsetLimitParams {
+    offset: i64,
+    limit: i64,
+}
+
+#[get("/job/terminated")]
+async fn get_terminated_jobs(
+    offset_limit: web::Query<OffsetLimitParams>,
+    sched: web::Data<Scheduler>,
+) -> Result<web::Json<Vec<FlowRecord>>, SchedulerError> {
+    return sched
+        .get_terminated_flows(offset_limit.offset, offset_limit.limit)
+        .await
+        .map(web::Json);
+}
+
+#[get("/job/{id}")]
+async fn get_job_single(
+    path: web::Path<i32>,
+    sched: web::Data<Scheduler>,
+) -> Result<web::Json<FlowRecord>, SchedulerError> {
+    let id = path.into_inner();
+    sched.get_flow(id).await.map(web::Json)
 }
 
 pub async fn start_server(
