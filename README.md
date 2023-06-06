@@ -70,6 +70,10 @@ Run the below commands to run an [example python flow](framework/test.py)
 - [ ] Remove credentials from logs
 - [ ] Environment variables in framework
 
+### Bugs
+
+- [ ] Handle unknown pod statuses
+
 ### API
 
 - [x] `POST /api/v1/job`
