@@ -63,7 +63,7 @@ async fn get_terminated_jobs(
 }
 
 #[get("/job/{id}")]
-async fn get_job_single(
+async fn get_single_job(
     path: web::Path<i32>,
     sched: web::Data<Scheduler>,
 ) -> Result<web::Json<FlowRecord>, SchedulerError> {
@@ -80,7 +80,13 @@ pub async fn start_server(
         App::new()
             .app_data(web::Data::new(sched.clone()))
             .app_data(web::Data::new(executor_config.clone()))
-            .service(web::scope("/api/v1").service(create_job))
+            .service(
+                web::scope("/api/v1")
+                    .service(create_job)
+                    .service(get_running_jobs)
+                    .service(get_terminated_jobs)
+                    .service(get_single_job),
+            )
     })
     .bind(("0.0.0.0", server_opts.port))?
     .run()

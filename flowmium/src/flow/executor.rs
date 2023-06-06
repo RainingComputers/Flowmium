@@ -338,7 +338,11 @@ async fn sched_pending_tasks(
         for (task_id, task) in tasks {
             match spawn_task(flow_id, task_id, &task, &config).await {
                 Ok(_) => sched.mark_task_running(flow_id, task_id).await?,
-                Err(_) => break,
+                Err(_) => {
+                    // TODO: Add test for below, without below, jobs could get stale on restart
+                    sched.mark_task_failed(flow_id, task_id).await?;
+                    break;
+                }
             }
         }
 

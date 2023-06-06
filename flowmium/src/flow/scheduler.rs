@@ -127,7 +127,9 @@ impl Scheduler {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
-            SET running_tasks = array_append(running_tasks, $1)
+            SET 
+                running_tasks = array_append(running_tasks, $1),
+                status       = 'running'::flow_status
             WHERE id = $2;
             "#,
             task_id,
@@ -366,11 +368,6 @@ impl Scheduler {
                         CASE 
                             WHEN status = 'running'::flow_status THEN current_stage + 1
                             ELSE current_stage 
-                        END,
-                    status =
-                        CASE 
-                            WHEN status = 'pending'::flow_status THEN 'running'::flow_status
-                            ELSE status 
                         END
                 WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
                 AND current_stage < json_array_length(plan) - 1

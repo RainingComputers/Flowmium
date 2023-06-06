@@ -32,6 +32,7 @@ Run the below commands to run an [example python flow](framework/test.py)
   export FLOWMIUM_ACCESS_KEY='minio'
   export FLOWMIUM_SECRET_KEY='password'
   export FLOWMIUM_EXECUTOR_IMAGE='registry:5000/flowmium-debug'
+  export KUBECONFIG=./kubeconfig.yaml
   cargo run -- server --port 8080
   ```
 
@@ -65,7 +66,7 @@ Run the below commands to run an [example python flow](framework/test.py)
 ### API
 
 - [x] `POST /api/v1/job`
-- [ ] `GET /api/v1/job/` and `GET /api/v1/job/{name}`
+- [x] `GET /api/v1/job/` and `GET /api/v1/job/{name}`
 - [ ] `DELETE /api/v1/job/{name}`
 - [ ] `POST /api/v1/secret` and `PUT /api/v1/secret`
 - [ ] `GET /api/v1/secret/`
