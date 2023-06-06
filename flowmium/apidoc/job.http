@@ -1,0 +1,67 @@
+POST http://localhost:8080/api/v1/job
+Content-Type: application/json
+
+{
+    "name": "testing",
+    "tasks": [
+        {
+            "name": "foo",
+            "image": "debian:latest",
+            "depends": [],
+            "cmd": [
+                "sh",
+                "-c",
+                "echo $MESSAGE  >> /task-output-foo.txt"
+            ],
+            "env": [
+                {
+                    "name": "MESSAGE",
+                    "value": "Hallo world"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "foo-output",
+                    "path": "/task-output-foo.txt"
+                }
+            ]
+        },
+        {
+            "name": "replace-letter-a",
+            "image": "debian:latest",
+            "depends": [
+                "foo"
+            ],
+            "cmd": [
+                "sh",
+                "-c",
+                "cat /task-input.txt | sed 's/\\ba\\b/e/g' > /task-output-replace-letter-a.txt"
+            ],
+            "env": [],
+            "inputs": [
+                {
+                    "from": "foo-output",
+                    "path": "/task-input.txt"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "replace-letter-a-output",
+                    "path": "/task-output-replace-letter-a.txt"
+                }
+            ]
+        }
+    ]
+}
+
+###
+
+GET http://localhost:8080/api/v1/job/59
+
+###
+
+GET http://localhost:8080/api/v1/job/terminated?offset=0&limit=10
+
+###
+
+GET http://localhost:8080/api/v1/job/running

@@ -22,6 +22,13 @@ Run the below commands to run an [example python flow](framework/test.py)
   make watch
   ```
 
+- Run tests (this is required)
+
+  ```
+  cd flowmium/
+  make test
+  ```
+
 - Run the flowmium server from root of this repo
 
   ```
