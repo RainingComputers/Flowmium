@@ -1,4 +1,4 @@
-use s3::{creds::Credentials, Bucket, Region};
+use s3::{creds::Credentials, request_trait::ResponseData, Bucket, Region};
 use tokio::{fs, io};
 
 use super::errors::ArtefactError;
@@ -48,6 +48,36 @@ pub async fn create_parent_directories(local_path: &String) -> io::Result<()> {
     fs::create_dir_all(prefix).await
 }
 
+pub async fn get_artefact(
+    bucket: &Bucket,
+    store_path: String,
+) -> Result<ResponseData, ArtefactError> {
+    let response = match bucket.get_object(&store_path).await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!(%error, "Could not download artefact");
+            return Err(ArtefactError::UnableToDownloadInput(error));
+        }
+    };
+
+    let status_code = response.status_code();
+
+    if status_code == 404 {
+        tracing::error!("Got 404 response while downloading artefact");
+        return Err(ArtefactError::ArtefactDoesNotExistError(store_path));
+    }
+
+    if status_code != 200 {
+        tracing::error!(
+            "Response was non ok code {} while downloading artefact",
+            status_code
+        );
+        return Err(ArtefactError::UnableToDownloadInputApiError(status_code));
+    }
+
+    return Ok(response);
+}
+
 #[tracing::instrument(skip(bucket))]
 pub async fn download_input(
     bucket: &Bucket,
@@ -56,23 +86,7 @@ pub async fn download_input(
 ) -> Result<(), ArtefactError> {
     tracing::info!("Downloading input");
 
-    let response = match bucket.get_object(store_path).await {
-        Ok(response) => response,
-        Err(error) => {
-            tracing::error!(%error, "Could not download input");
-            return Err(ArtefactError::UnableToDownloadInput(error));
-        }
-    };
-
-    let status_code = response.status_code();
-
-    if status_code != 200 {
-        tracing::error!(
-            "Response was non ok code {} while downloading input",
-            status_code
-        );
-        return Err(ArtefactError::UnableToDownloadInputApiError(status_code));
-    }
+    let response = get_artefact(bucket, store_path).await?;
 
     if let Err(error) = create_parent_directories(&local_path).await {
         tracing::error!(%error, "Unable to create parent directories for input");

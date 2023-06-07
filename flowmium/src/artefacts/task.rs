@@ -9,7 +9,7 @@ use crate::flow::model::{Input, Output};
 use super::bucket::{download_input, get_bucket, upload_output};
 use super::errors::ArtefactError;
 
-fn get_store_path(flow_id: usize, output_name: &str) -> String {
+pub fn get_store_path(flow_id: usize, output_name: &str) -> String {
     return flow_id.to_string() + "/" + output_name;
 }
 

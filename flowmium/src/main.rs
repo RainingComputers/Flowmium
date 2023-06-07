@@ -6,10 +6,13 @@ mod pool;
 
 use api::start_server;
 use artefacts::{
+    bucket::get_bucket,
+    errors::ArtefactError,
     init::do_init,
     task::{run_task, SidecarConfig},
 };
 use pool::{init_db_and_get_pool, PostgresConfig};
+use s3::Bucket;
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
@@ -51,6 +54,19 @@ async fn get_executor_config() -> Option<ExecutorConfig> {
     let executor_config = ExecutorConfig::create_default_config(config);
 
     return Some(executor_config);
+}
+
+fn get_bucket_from_executor_config(
+    executor_config: &ExecutorConfig,
+) -> Result<Bucket, ArtefactError> {
+    let pod_config = &executor_config.pod_config;
+
+    return get_bucket(
+        &pod_config.access_key,
+        &pod_config.secret_key,
+        &pod_config.bucket_name,
+        pod_config.store_url.clone(),
+    );
 }
 
 #[tracing::instrument]
@@ -106,6 +122,10 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return  ExitCode::FAILURE;
     };
 
+    let Ok(bucket) = get_bucket_from_executor_config(&executor_config) else {
+        return ExitCode::FAILURE;
+    };
+
     let sched_loop = sched.clone();
     let executor_config_loop = executor_config.clone();
 
@@ -121,7 +141,7 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
 
     tracing::info!("Starting API server");
 
-    if let Err(error) = start_server(server_opts, sched, executor_config).await {
+    if let Err(error) = start_server(server_opts, sched, executor_config, bucket).await {
         tracing::error!(%error, "Unable to start server");
         return ExitCode::FAILURE;
     }

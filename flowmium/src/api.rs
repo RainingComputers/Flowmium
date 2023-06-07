@@ -1,8 +1,10 @@
-use actix_web::{get, http::StatusCode, post, web, App, HttpServer};
+use actix_web::{get, http::StatusCode, post, web, App, HttpResponse, HttpServer, ResponseError};
+use s3::Bucket;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     args::ServerOpts,
+    artefacts::{bucket::get_artefact, errors::ArtefactError, task::get_store_path},
     flow::{
         executor::{instantiate_flow, ExecutorConfig, ExecutorError},
         model::Flow,
@@ -10,7 +12,7 @@ use crate::{
     },
 };
 
-impl actix_web::error::ResponseError for ExecutorError {
+impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
         match *self {
             ExecutorError::UnableToConstructPlanError(_) => StatusCode::BAD_REQUEST,
@@ -29,7 +31,7 @@ async fn create_job(
         .map(|id| id.to_string())
 }
 
-impl actix_web::error::ResponseError for SchedulerError {
+impl ResponseError for SchedulerError {
     fn status_code(&self) -> StatusCode {
         match *self {
             SchedulerError::FlowDoesNotExistError(_) => StatusCode::BAD_REQUEST,
@@ -71,21 +73,48 @@ async fn get_single_job(
     sched.get_flow(id).await.map(web::Json)
 }
 
+impl ResponseError for ArtefactError {
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            ArtefactError::ArtefactDoesNotExistError(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+#[get("/artefact/{flow_id}/{output_name}")]
+async fn download_artefact(
+    path: web::Path<(usize, String)>,
+    bucket: web::Data<Bucket>,
+) -> Result<HttpResponse, ArtefactError> {
+    let (flow_id, output_name) = path.into_inner();
+    let store_path = get_store_path(flow_id, &output_name);
+
+    let bytes: Vec<u8> = get_artefact(&bucket, store_path).await?.into();
+
+    Ok(HttpResponse::build(StatusCode::OK)
+        .content_type("application/octet-stream")
+        .body(bytes))
+}
+
 pub async fn start_server(
     server_opts: ServerOpts,
     sched: Scheduler,
     executor_config: ExecutorConfig,
+    bucket: Bucket,
 ) -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(sched.clone()))
             .app_data(web::Data::new(executor_config.clone()))
+            .app_data(web::Data::new(bucket.clone()))
             .service(
                 web::scope("/api/v1")
                     .service(create_job)
                     .service(get_running_jobs)
                     .service(get_terminated_jobs)
-                    .service(get_single_job),
+                    .service(get_single_job)
+                    .service(download_artefact),
             )
     })
     .bind(("0.0.0.0", server_opts.port))?

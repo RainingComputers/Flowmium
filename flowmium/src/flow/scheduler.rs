@@ -8,13 +8,13 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SchedulerError {
-    #[error("invalid stored value error for flow {0}")]
+    #[error("invalid stored value error for flow: {0}")]
     InvalidStoredValueError(i32),
-    #[error("database query error {0}")]
+    #[error("database query error: {0}")]
     DatabaseQueryError(#[source] sqlx::error::Error),
     #[error("flow {0} does not exist error")]
     FlowDoesNotExistError(i32),
-    #[error("unable to serialize/deserialize JSON {0}")]
+    #[error("unable to serialize/deserialize JSON: {0}")]
     SerializeDeserializeError(#[source] serde_json::Error),
 }
 

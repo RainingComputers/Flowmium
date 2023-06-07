@@ -78,8 +78,7 @@ Run the below commands to run an [example python flow](framework/test.py)
 
 - [x] `POST /api/v1/job`
 - [x] `GET /api/v1/job/` and `GET /api/v1/job/{name}`
-- [ ] `DELETE /api/v1/job/{name}`
 - [ ] `POST /api/v1/secret` and `PUT /api/v1/secret`
 - [ ] `GET /api/v1/secret/`
 - [ ] `DELETE /api/v1/secret`
-- [ ] Artifacts API
+- [x] `GET /api/v1/artefact/{id}/{output_name}`

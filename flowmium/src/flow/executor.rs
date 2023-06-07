@@ -19,15 +19,15 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ExecutorError {
-    #[error("unable to spawn task {0}")]
+    #[error("unable to spawn task: {0}")]
     UnableToSpawnTaskError(#[source] kube::error::Error),
-    #[error("unable connect to kubernetes {0}")]
+    #[error("unable connect to kubernetes: {0}")]
     UnableToConnectToKubernetesError(#[source] kube::error::Error),
     #[error("unexpected runner state for flow {0} task {1}")]
     UnexpectedRunnerStateError(i32, i32),
-    #[error("invalid task definition {0}")]
+    #[error("invalid task definition: {0}")]
     InvalidTaskDefinitionError(#[source] serde_json::Error),
-    #[error("unable to construct plan")]
+    #[error("unable to construct plan: {0}")]
     UnableToConstructPlanError(
         #[from]
         #[source]
@@ -52,19 +52,19 @@ enum TaskStatus {
 
 #[derive(Debug, PartialEq, Deserialize, Clone)]
 pub struct TaskPodConfig {
-    store_url: String,
-    bucket_name: String,
-    access_key: String,
-    secret_key: String,
-    executor_image: String,
+    pub store_url: String,
+    pub bucket_name: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub executor_image: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ExecutorConfig {
-    namespace: String,
-    flow_id_label: String,
-    task_id_label: String,
-    pod_config: TaskPodConfig,
+    pub namespace: String,
+    pub flow_id_label: String,
+    pub task_id_label: String,
+    pub pod_config: TaskPodConfig,
 }
 
 impl ExecutorConfig {

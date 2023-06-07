@@ -5,7 +5,7 @@ Content-Type: application/json
     "name": "testing",
     "tasks": [
         {
-            "name": "foo",
+            "name": "hallo-world",
             "image": "debian:latest",
             "depends": [],
             "cmd": [
@@ -30,12 +30,12 @@ Content-Type: application/json
             "name": "replace-letter-a",
             "image": "debian:latest",
             "depends": [
-                "foo"
+                "hallo-world"
             ],
             "cmd": [
                 "sh",
                 "-c",
-                "cat /task-input.txt | sed 's/\\ba\\b/e/g' > /task-output-replace-letter-a.txt"
+                "cat /task-input.txt | sed 's/a/e/g' > /task-output-replace-letter-a.txt"
             ],
             "env": [],
             "inputs": [
@@ -65,3 +65,7 @@ GET http://localhost:8080/api/v1/job/terminated?offset=0&limit=10
 ###
 
 GET http://localhost:8080/api/v1/job/running
+
+###
+
+GET http://localhost:8080/api/v1/artefact/21/replace-letter-a-output
