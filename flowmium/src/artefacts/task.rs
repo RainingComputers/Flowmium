@@ -67,7 +67,7 @@ fn get_command(cmd: Vec<String>) -> Option<Command> {
     return Some(command);
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(config))]
 pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     let option_inputs: Option<Vec<Input>> = match serde_json::from_str(&config.input_json) {
         Ok(inputs) => inputs,
