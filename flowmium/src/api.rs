@@ -1,6 +1,13 @@
-use actix_web::{get, http::StatusCode, post, web, App, HttpResponse, HttpServer, ResponseError};
+use actix_web::{
+    delete, get,
+    http::StatusCode,
+    post, put,
+    web::{self, service},
+    App, HttpResponse, HttpServer, ResponseError,
+};
 use s3::Bucket;
 use serde::{Deserialize, Serialize};
+use sqlx::{Pool, Postgres};
 
 use crate::{
     args::ServerOpts,
@@ -10,6 +17,7 @@ use crate::{
         model::Flow,
         scheduler::{FlowRecord, Scheduler, SchedulerError},
     },
+    secrets::{SecretsCrud, SecretsCrudError},
 };
 
 impl ResponseError for ExecutorError {
@@ -97,24 +105,76 @@ async fn download_artefact(
         .body(bytes))
 }
 
+impl ResponseError for SecretsCrudError {
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            SecretsCrudError::DatabaseQueryError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
+
+#[post("/secret/{key}")]
+async fn create_secret(
+    key: web::Path<String>,
+    value: web::Json<String>,
+    secrets: web::Data<SecretsCrud>,
+) -> Result<&'static str, SecretsCrudError> {
+    secrets
+        .create_secret(key.into_inner(), value.to_string())
+        .await?;
+
+    Ok("")
+}
+
+#[delete("/secret/{key}")]
+async fn delete_secret(
+    key: web::Path<String>,
+    secrets: web::Data<SecretsCrud>,
+) -> Result<&'static str, SecretsCrudError> {
+    secrets.delete_secret(key.into_inner()).await?;
+
+    Ok("")
+}
+
+#[put("/secret/{key}")]
+async fn update_secret(
+    key: web::Path<String>,
+    value: web::Json<String>,
+    secrets: web::Data<SecretsCrud>,
+) -> Result<&'static str, SecretsCrudError> {
+    secrets
+        .update_secret(key.into_inner(), value.to_string())
+        .await?;
+
+    Ok("")
+}
+
 pub async fn start_server(
     server_opts: ServerOpts,
-    sched: Scheduler,
+    pool: Pool<Postgres>,
     executor_config: ExecutorConfig,
     bucket: Bucket,
 ) -> std::io::Result<()> {
+    let sched = Scheduler { pool: pool.clone() };
+    let secrets = SecretsCrud { pool: pool.clone() };
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(sched.clone()))
             .app_data(web::Data::new(executor_config.clone()))
             .app_data(web::Data::new(bucket.clone()))
+            .app_data(web::Data::new(secrets.clone()))
             .service(
                 web::scope("/api/v1")
                     .service(create_job)
                     .service(get_running_jobs)
                     .service(get_terminated_jobs)
                     .service(get_single_job)
-                    .service(download_artefact),
+                    .service(download_artefact)
+                    .service(create_secret)
+                    .service(update_secret)
+                    .service(delete_secret),
             )
     })
     .bind(("0.0.0.0", server_opts.port))?

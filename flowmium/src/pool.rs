@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use thiserror::Error;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct PostgresConfig {

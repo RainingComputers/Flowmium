@@ -14,6 +14,7 @@ pub enum SecretsCrudError {
     DatabaseQueryError(#[source] sqlx::error::Error),
 }
 
+#[derive(Clone)]
 pub struct SecretsCrud {
     pub pool: Pool<Postgres>,
 }
@@ -79,7 +80,7 @@ impl SecretsCrud {
         check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
     }
 
-    pub async fn get_secret(&self, key: String) -> Result<String, SecretsCrudError> {
+    pub async fn get_secret(&self, key: &str) -> Result<String, SecretsCrudError> {
         let secret_optional = match sqlx::query!(
             r#"SELECT secret_value FROM secrets WHERE secret_key = $1"#,
             key
@@ -95,7 +96,7 @@ impl SecretsCrud {
         };
 
         let Some(record) = secret_optional else {
-            return Err(SecretsCrudError::SecretDoesNotExist(key));
+            return Err(SecretsCrudError::SecretDoesNotExist(key.to_owned()));
         };
 
         Ok(record.secret_value)
@@ -156,13 +157,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            test_crud.get_secret("foo".to_owned()).await.unwrap(),
-            "bar".to_owned()
-        );
+        assert_eq!(test_crud.get_secret("foo").await.unwrap(), "bar".to_owned());
 
         assert_eq!(
-            test_crud.get_secret("another".to_owned()).await.unwrap(),
+            test_crud.get_secret("another").await.unwrap(),
             "yeah".to_owned()
         );
 
@@ -172,7 +170,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            test_crud.get_secret("another".to_owned()).await.unwrap(),
+            test_crud.get_secret("another").await.unwrap(),
             "ye".to_owned()
         );
 
@@ -195,10 +193,7 @@ mod tests {
         );
 
         assert_does_not_exist_error(
-            test_crud
-                .get_secret("another".to_owned())
-                .await
-                .unwrap_err(),
+            test_crud.get_secret("another").await.unwrap_err(),
             "another",
         );
     }

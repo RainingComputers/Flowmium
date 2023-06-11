@@ -14,6 +14,8 @@ use artefacts::{
 };
 use pool::{init_db_and_get_pool, PostgresConfig};
 use s3::Bucket;
+use secrets::SecretsCrud;
+use sqlx::{Pool, Postgres};
 use std::{process::ExitCode, time::Duration};
 use tokio::fs;
 
@@ -24,7 +26,7 @@ use flow::{
     scheduler::Scheduler,
 };
 
-async fn get_scheduler() -> Option<Scheduler> {
+async fn get_pool() -> Option<Pool<Postgres>> {
     let database_config: PostgresConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
         Err(error) => {
@@ -38,9 +40,7 @@ async fn get_scheduler() -> Option<Scheduler> {
         return None;
     };
 
-    let sched = Scheduler { pool };
-
-    return Some(sched);
+    return Some(pool);
 }
 
 async fn get_executor_config() -> Option<ExecutorConfig> {
@@ -72,13 +72,15 @@ fn get_bucket_from_executor_config(
 
 #[tracing::instrument]
 async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
-    let Some(sched) = get_scheduler().await else {
+    let Some(pool) = get_pool().await else {
         return  ExitCode::FAILURE;
     };
 
     let Some(executor_config) = get_executor_config().await else {
         return  ExitCode::FAILURE;
     };
+
+    let sched = Scheduler { pool };
 
     for dag_file_path in execute_opts.files.iter() {
         let contents = match fs::read_to_string(dag_file_path).await {
@@ -115,7 +117,7 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
 
 #[tracing::instrument]
 async fn run_server(server_opts: ServerOpts) -> ExitCode {
-    let Some(sched) = get_scheduler().await else {
+    let Some(pool) = get_pool().await else {
         return  ExitCode::FAILURE;
     };
 
@@ -127,22 +129,23 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let sched_loop = sched.clone();
+    let pool_loop = pool.clone();
     let executor_config_loop = executor_config.clone();
 
     tracing::info!("Starting scheduler loop");
 
     tokio::spawn(async move {
+        let sched = Scheduler { pool: pool_loop };
+
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-
-            schedule_and_run_tasks(&sched_loop, &executor_config_loop).await;
+            schedule_and_run_tasks(&sched, &executor_config_loop).await;
         }
     });
 
     tracing::info!("Starting API server");
 
-    if let Err(error) = start_server(server_opts, sched, executor_config, bucket).await {
+    if let Err(error) = start_server(server_opts, pool.clone(), executor_config, bucket).await {
         tracing::error!(%error, "Unable to start server");
         return ExitCode::FAILURE;
     }

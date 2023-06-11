@@ -69,3 +69,21 @@ GET http://localhost:8080/api/v1/job/running
 ###
 
 GET http://localhost:8080/api/v1/artefact/21/replace-letter-a-output
+
+###
+
+POST http://localhost:8080/api/v1/secret/test-key
+Content-Type: application/json
+
+"test-value"
+
+###
+
+DELETE http://localhost:8080/api/v1/secret/test-key
+
+###
+
+PUT http://localhost:8080/api/v1/secret/test-key
+Content-Type: application/json
+
+"new-test-value"
