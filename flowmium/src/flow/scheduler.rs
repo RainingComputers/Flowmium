@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
+use crate::pool::check_rows_updated;
+
 use super::model::Task;
 
 use thiserror::Error;
@@ -109,15 +111,6 @@ impl Scheduler {
         return Ok(id);
     }
 
-    pub fn check_rows_updated(flow_id: i32, rows_updated: u64) -> Result<(), SchedulerError> {
-        if rows_updated != 1 {
-            tracing::error!("Flow with id {} does not exist", flow_id);
-            return Err(SchedulerError::FlowDoesNotExistError(flow_id));
-        }
-
-        Ok(())
-    }
-
     #[tracing::instrument(skip(self))]
     pub async fn mark_task_running(
         &self,
@@ -145,7 +138,7 @@ impl Scheduler {
             }
         };
 
-        Scheduler::check_rows_updated(flow_id, rows_updated)
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
     }
 
     #[tracing::instrument(skip(self))]
@@ -181,7 +174,7 @@ impl Scheduler {
             }
         };
 
-        Scheduler::check_rows_updated(flow_id, rows_updated)
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
     }
 
     #[tracing::instrument(skip(self))]
@@ -207,7 +200,7 @@ impl Scheduler {
             }
         };
 
-        Scheduler::check_rows_updated(flow_id, rows_updated)
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
     }
 
     #[tracing::instrument(skip(self))]
@@ -413,6 +406,7 @@ mod tests {
 
     use super::*;
 
+    // TODO: Somehow DRY this function
     async fn get_test_pool() -> Pool<Postgres> {
         let pool = PgPoolOptions::new()
             .max_connections(5)

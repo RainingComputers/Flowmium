@@ -3,6 +3,7 @@ mod args;
 mod artefacts;
 mod flow;
 mod pool;
+mod secrets;
 
 use api::start_server;
 use artefacts::{

@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct PostgresConfig {
@@ -27,4 +28,12 @@ pub async fn init_db_and_get_pool(config: PostgresConfig) -> Option<Pool<Postgre
             return None;
         }
     }
+}
+
+pub fn check_rows_updated<T>(rows_updated: u64, error: T) -> Result<(), T> {
+    if rows_updated != 1 {
+        return Err(error);
+    }
+
+    Ok(())
 }
