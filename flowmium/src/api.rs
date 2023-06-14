@@ -2,7 +2,7 @@ use actix_web::{
     delete, get,
     http::StatusCode,
     post, put,
-    web::{self, service},
+    web::{self},
     App, HttpResponse, HttpServer, ResponseError,
 };
 use s3::Bucket;

@@ -80,7 +80,8 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
         return  ExitCode::FAILURE;
     };
 
-    let sched = Scheduler { pool };
+    let sched = Scheduler { pool: pool.clone() };
+    let secrets = SecretsCrud { pool };
 
     for dag_file_path in execute_opts.files.iter() {
         let contents = match fs::read_to_string(dag_file_path).await {
@@ -111,7 +112,7 @@ async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
     loop {
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        schedule_and_run_tasks(&sched, &executor_config).await;
+        schedule_and_run_tasks(&sched, &executor_config, &secrets).await;
     }
 }
 
@@ -135,11 +136,16 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
     tracing::info!("Starting scheduler loop");
 
     tokio::spawn(async move {
-        let sched = Scheduler { pool: pool_loop };
+        let sched = Scheduler {
+            pool: pool_loop.clone(),
+        };
+        let secrets = SecretsCrud {
+            pool: pool_loop.clone(),
+        };
 
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&sched, &executor_config_loop).await;
+            schedule_and_run_tasks(&sched, &executor_config_loop, &secrets).await;
         }
     });
 

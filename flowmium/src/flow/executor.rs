@@ -1,3 +1,6 @@
+use crate::secrets::SecretsCrud;
+use crate::secrets::SecretsCrudError;
+
 use super::model::EnvVar;
 use super::model::Flow;
 use super::model::KeyValuePair;
@@ -33,11 +36,17 @@ pub enum ExecutorError {
         #[source]
         PlannerError,
     ),
-    #[error("unable to create flow error")]
+    #[error("unable to create flow error: {0}")]
     UnableToCreateFlowOrMarkTaskError(
         #[from]
         #[source]
         SchedulerError,
+    ),
+    #[error("unable to fetch secret: {0}")]
+    UnableToFetchSecret(
+        #[from]
+        #[source]
+        SecretsCrudError,
     ),
 }
 
@@ -95,13 +104,29 @@ fn get_task_cmd(task: &Task) -> Vec<&str> {
     return task_cmd;
 }
 
-fn get_task_envs<'a>(
+async fn get_env_json(
+    env: &EnvVar,
+    secrets: &SecretsCrud,
+) -> Result<serde_json::Value, ExecutorError> {
+    match env {
+        EnvVar::KeyValuePair(KeyValuePair { name, value }) => {
+            Ok(serde_json::json! ({"name": name, "value": value}))
+        }
+        EnvVar::SecretRef(SecretRef { name, from_secret }) => {
+            Ok(serde_json::json! ({"name": name, "value": secrets.get_secret(from_secret).await?}))
+            // TODO: Actually fetch secret
+        }
+    }
+}
+
+async fn get_task_envs<'a>(
     task: &'a Task,
     input_json: String,
     output_json: String,
     flow_id: i32,
     config: &'a ExecutorConfig,
-) -> Vec<serde_json::Value> {
+    secrets: &SecretsCrud,
+) -> Result<Vec<serde_json::Value>, ExecutorError> {
     let mut task_envs: Vec<serde_json::Value> = vec![
         serde_json::json! ({
             "name": "FLOWMIUM_INPUT_JSON",
@@ -133,24 +158,21 @@ fn get_task_envs<'a>(
         }),
     ];
 
-    task_envs.extend(task.env.iter().map(|env| match env {
-        EnvVar::KeyValuePair(KeyValuePair { name, value }) => {
-            serde_json::json! ({"name": name, "value": value})
-        }
-        EnvVar::SecretRef(SecretRef { name, from_secret }) => {
-            serde_json::json! ({"name": name, "value": from_secret}) // TODO: Actually fetch secret
-        }
-    }));
+    for env in task.env.iter() {
+        let json_env = get_env_json(env, secrets).await?;
+        task_envs.push(json_env);
+    }
 
-    return task_envs;
+    return Ok(task_envs);
 }
 
-#[tracing::instrument(skip(config))]
+#[tracing::instrument(skip(config, secrets))]
 async fn spawn_task(
     flow_id: i32,
     task_id: i32,
     task: &Task,
     config: &ExecutorConfig,
+    secrets: &SecretsCrud,
 ) -> Result<Job, ExecutorError> {
     tracing::info!("Spawning task");
 
@@ -207,7 +229,7 @@ async fn spawn_task(
                         "name": task.name,
                         "image": task.image,
                         "command": get_task_cmd(&task),
-                        "env": get_task_envs(task, input_json, output_json, flow_id, config),
+                        "env": get_task_envs(task, input_json, output_json, flow_id, config, secrets).await?,
                         "volumeMounts": [
                             {
                                 "name": "executable",
@@ -326,17 +348,18 @@ pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, Exec
     return Ok(flow_id);
 }
 
-#[tracing::instrument(skip(sched, config))]
+#[tracing::instrument(skip(sched, config, secrets))]
 async fn sched_pending_tasks(
     sched: &Scheduler,
     flow_id: i32,
     config: &ExecutorConfig,
+    secrets: &SecretsCrud,
 ) -> Result<bool, ExecutorError> {
     let option_tasks = sched.schedule_tasks(flow_id).await?;
 
     if let Some(tasks) = option_tasks {
         for (task_id, task) in tasks {
-            match spawn_task(flow_id, task_id, &task, &config).await {
+            match spawn_task(flow_id, task_id, &task, &config, secrets).await {
                 Ok(_) => sched.mark_task_running(flow_id, task_id).await?,
                 Err(_) => {
                     // TODO: Add test for below, without below, jobs could get stale on restart
@@ -371,11 +394,15 @@ async fn mark_running_tasks(
     };
 }
 
-#[tracing::instrument(skip(sched, config))]
-pub async fn schedule_and_run_tasks(sched: &Scheduler, config: &ExecutorConfig) {
+#[tracing::instrument(skip(sched, config, secrets))]
+pub async fn schedule_and_run_tasks(
+    sched: &Scheduler,
+    config: &ExecutorConfig,
+    secrets: &SecretsCrud,
+) {
     if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows_ids().await {
         for (flow_id, running_tasks) in tasks_to_schedule {
-            match sched_pending_tasks(sched, flow_id, &config).await {
+            match sched_pending_tasks(sched, flow_id, &config, secrets).await {
                 Ok(true) => continue,
                 Ok(false) => (),
                 Err(_) => break,
@@ -494,9 +521,11 @@ mod tests {
                     cmd: vec![
                         "sh".to_string(),
                         "-c".to_string(),
-                        "echo 'Greetings foobar' >> /greetings-foobar".to_string(),
+                        "echo $GREETINGS >> /greetings-foobar".to_string(),
                     ],
-                    env: vec![],
+                    env: vec![
+                        EnvVar::SecretRef(SecretRef{name: "GREETINGS".to_string(), from_secret: "test-greetings-secret".to_string()})
+                    ],
                     inputs: None,
                     outputs: Some(vec![Output {
                         name: "OutputFromTaskE".to_string(),
@@ -611,7 +640,16 @@ mod tests {
     async fn test_schedule_and_run_tasks() {
         let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let sched = Scheduler { pool };
+        let sched = Scheduler { pool: pool.clone() };
+        let secrets = SecretsCrud { pool };
+
+        secrets
+            .create_secret(
+                "test-greetings-secret".to_string(),
+                "Greetings foobar".to_string(),
+            )
+            .await
+            .unwrap();
 
         delete_all_pods().await;
         delete_all_jobs().await;
@@ -621,7 +659,7 @@ mod tests {
 
         for _ in 0..50 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&sched, &config).await;
+            schedule_and_run_tasks(&sched, &config, &secrets).await;
         }
 
         for task_id in 0..5 {
@@ -697,13 +735,14 @@ mod tests {
 
         let pool = get_test_pool().await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let sched = Scheduler { pool };
+        let sched = Scheduler { pool: pool.clone() };
+        let secrets = SecretsCrud { pool };
 
         let flow_id = instantiate_flow(test_flow_fail(), &sched).await.unwrap();
 
         for _ in 0..30 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&sched, &config).await;
+            schedule_and_run_tasks(&sched, &config, &secrets).await;
         }
 
         assert_eq!(

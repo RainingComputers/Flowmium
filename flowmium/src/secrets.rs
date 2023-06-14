@@ -104,7 +104,6 @@ impl SecretsCrud {
 }
 
 mod tests {
-    use core::panic;
 
     use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
