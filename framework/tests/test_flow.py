@@ -1,4 +1,5 @@
 from flowmium import Flow, FlowContext
+import os
 
 
 flow = Flow("testing")
@@ -6,7 +7,7 @@ flow = Flow("testing")
 
 @flow.task()
 def foo() -> str:
-    return "Hallo worlt"
+    return os.environ["GREETINGS"]
 
 
 @flow.task({"input_str": foo})
@@ -33,7 +34,10 @@ def test_dag_yaml() -> None:
                 "image": "registry:5000/localhost",
                 "depends": [],
                 "cmd": ["python3", "test.py"],
-                "env": [{"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "0"}],
+                "env": [
+                    {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "0"},
+                    {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
+                ],
                 "inputs": [],
                 "outputs": [{"name": "foo-output", "path": "task-output-foo.pkl"}],
             },
@@ -42,7 +46,10 @@ def test_dag_yaml() -> None:
                 "image": "registry:5000/localhost",
                 "depends": ["foo"],
                 "cmd": ["python3", "test.py"],
-                "env": [{"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "1"}],
+                "env": [
+                    {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "1"},
+                    {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
+                ],
                 "inputs": [{"from": "foo-output", "path": "task-inputs-input_str.pkl"}],
                 "outputs": [
                     {
@@ -56,7 +63,10 @@ def test_dag_yaml() -> None:
                 "image": "registry:5000/localhost",
                 "depends": ["foo"],
                 "cmd": ["python3", "test.py"],
-                "env": [{"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "2"}],
+                "env": [
+                    {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "2"},
+                    {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
+                ],
                 "inputs": [{"from": "foo-output", "path": "task-inputs-input_str.pkl"}],
                 "outputs": [
                     {
@@ -70,7 +80,10 @@ def test_dag_yaml() -> None:
                 "image": "registry:5000/localhost",
                 "depends": ["replace-letter-t", "replace-letter-a"],
                 "cmd": ["python3", "test.py"],
-                "env": [{"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "3"}],
+                "env": [
+                    {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "3"},
+                    {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
+                ],
                 "inputs": [
                     {
                         "from": "replace-letter-t-output",
@@ -89,6 +102,10 @@ def test_dag_yaml() -> None:
     }
 
     assert (
-        flow.get_dag_dict("registry:5000/localhost", ["python3", "test.py"])
+        flow.get_dag_dict(
+            "registry:5000/localhost",
+            ["python3", "test.py"],
+            {"GREETINGS": "test-greetings-secret"},
+        )
         == expected_dag
     )

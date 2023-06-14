@@ -103,6 +103,7 @@ impl SecretsCrud {
     }
 }
 
+#[cfg(test)]
 mod tests {
 
     use sqlx::{postgres::PgPoolOptions, Pool, Postgres};

@@ -140,7 +140,9 @@ class Flow:
         if task_output is not None:
             task_def.output.dump(task_output, task_def.output.path)
 
-    def get_dag_dict(self, image: str, cmd: list[str]) -> dict[str, Any]:
+    def get_dag_dict(
+        self, image: str, cmd: list[str], secrets_refs: dict[str, str]
+    ) -> dict[str, Any]:
         tasks: list[dict[str, Any]] = []
 
         for task_id, task in enumerate(self.tasks):
@@ -155,6 +157,10 @@ class Flow:
                             "name": "FLOWMIUM_FRAMEWORK_TASK_ID",
                             "value": f"{task_id}",
                         },
+                    ]
+                    + [
+                        {"name": env_name, "fromSecret": secret_name}
+                        for env_name, secret_name in secrets_refs.items()
                     ],
                     "inputs": [
                         {"from": inp.frm, "path": inp.path} for inp in task.inputs
@@ -168,7 +174,7 @@ class Flow:
             "tasks": tasks,
         }
 
-    def run(self) -> None:
+    def run(self, secrets_refs: dict[str, str] = {}) -> None:
         try:
             flowctx = FlowContext(
                 task_id=int(os.environ["FLOWMIUM_FRAMEWORK_TASK_ID"]),
@@ -187,7 +193,7 @@ class Flow:
 
             resp = requests.post(
                 urljoin(args.flowmium_server, "/api/v1/job"),
-                json=self.get_dag_dict(args.image, args.cmd)
+                json=self.get_dag_dict(args.image, args.cmd, secrets_refs),
             )
 
             print(resp.status_code)
