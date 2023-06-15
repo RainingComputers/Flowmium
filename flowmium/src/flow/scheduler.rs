@@ -3,6 +3,7 @@ use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
 use crate::pool::check_rows_updated;
+use tokio::sync::broadcast;
 
 use super::model::Task;
 
@@ -42,12 +43,37 @@ pub struct FlowRecord {
     status: FlowStatus,
 }
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskStatus {
+    Running,
+    Failed,
+    Finished,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub enum SchedulerEvent {
+    TaskStatusUpdateEvent(i32, i32, TaskStatus),
+    FlowCreatedEvent(i32),
+}
+
 #[derive(Debug, Clone)]
 pub struct Scheduler {
     pub pool: Pool<Postgres>,
+    tx: broadcast::Sender<SchedulerEvent>,
 }
 
 impl Scheduler {
+    pub fn new(pool: Pool<Postgres>) -> Self {
+        let (tx, _rx) = broadcast::channel(1024);
+
+        return Self { pool, tx };
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<SchedulerEvent> {
+        self.tx.subscribe()
+    }
+
     #[tracing::instrument(skip(self))]
     pub async fn create_flow(
         &self,
@@ -108,6 +134,8 @@ impl Scheduler {
             }
         };
 
+        let _ = self.tx.send(SchedulerEvent::FlowCreatedEvent(id));
+
         return Ok(id);
     }
 
@@ -138,7 +166,15 @@ impl Scheduler {
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+            flow_id,
+            task_id,
+            TaskStatus::Running,
+        ));
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]
@@ -174,7 +210,15 @@ impl Scheduler {
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+            flow_id,
+            task_id,
+            TaskStatus::Finished,
+        ));
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]
@@ -200,7 +244,15 @@ impl Scheduler {
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+            flow_id,
+            task_id,
+            TaskStatus::Failed,
+        ));
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(self))]
@@ -398,29 +450,12 @@ impl Scheduler {
 mod tests {
 
     use serial_test::serial;
-    use sqlx::postgres::PgPoolOptions;
 
-    use crate::flow::model::Task;
+    use crate::{flow::model::Task, pool::get_test_pool};
 
     use std::collections::BTreeSet;
 
     use super::*;
-
-    // TODO: Somehow DRY this function
-    async fn get_test_pool() -> Pool<Postgres> {
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
-        sqlx::query!("DELETE from flows;")
-            .execute(&pool)
-            .await
-            .unwrap();
-
-        return pool;
-    }
 
     fn create_fake_task(task_name: &str) -> Task {
         Task {
@@ -437,7 +472,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_scheduler() {
-        let pool = get_test_pool().await;
+        let pool = get_test_pool(&["flows"]).await;
 
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
@@ -464,12 +499,14 @@ mod tests {
             BTreeSet::from([2]),
         ];
 
-        let scheduler = Scheduler { pool };
+        let scheduler = Scheduler::new(pool);
+        let mut rx = scheduler.subscribe();
 
         let flow_id_0 = scheduler
             .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
             .await
             .unwrap();
+
         let flow_id_1 = scheduler
             .create_flow("flow-1".to_string(), test_plan_1, test_tasks_1)
             .await
@@ -517,6 +554,7 @@ mod tests {
             Some(vec![(3, create_fake_task("flow-0-task-3")),]),
         );
 
+        scheduler.mark_task_running(flow_id_0, 3).await.unwrap();
         scheduler.mark_task_finished(flow_id_0, 3).await.unwrap();
 
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
@@ -548,11 +586,30 @@ mod tests {
             scheduler.get_running_or_pending_flows_ids().await.unwrap(),
             vec![]
         );
+
+        let expected_events = vec![
+            SchedulerEvent::FlowCreatedEvent(flow_id_0),
+            SchedulerEvent::FlowCreatedEvent(flow_id_1),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 0, TaskStatus::Running),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 0, TaskStatus::Finished),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 1, TaskStatus::Running),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 2, TaskStatus::Running),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 1, TaskStatus::Finished),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 2, TaskStatus::Finished),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 3, TaskStatus::Running),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 3, TaskStatus::Finished),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_1, 0, TaskStatus::Running),
+            SchedulerEvent::TaskStatusUpdateEvent(flow_id_1, 0, TaskStatus::Failed),
+        ];
+
+        for event in expected_events {
+            assert_eq!(rx.recv().await.unwrap(), event);
+        }
     }
 
     #[tokio::test]
     async fn test_scheduler_flow_does_not_exist() {
-        let pool = get_test_pool().await;
+        let pool = get_test_pool(&["flows"]).await;
 
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
@@ -568,7 +625,7 @@ mod tests {
 
         let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
 
-        let scheduler = Scheduler { pool };
+        let scheduler = Scheduler::new(pool);
 
         let flow_id_0 = scheduler
             .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)

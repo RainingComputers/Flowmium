@@ -17,12 +17,10 @@ use s3::Bucket;
 use secrets::SecretsCrud;
 use sqlx::{Pool, Postgres};
 use std::{process::ExitCode, time::Duration};
-use tokio::fs;
 
-use args::{ExecuteOpts, ServerOpts, TaskOpts};
+use args::{ServerOpts, TaskOpts};
 use flow::{
-    executor::{instantiate_flow, schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
-    model::Flow,
+    executor::{schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
     scheduler::Scheduler,
 };
 
@@ -70,50 +68,21 @@ fn get_bucket_from_executor_config(
     );
 }
 
-#[tracing::instrument]
-async fn execute_main(execute_opts: ExecuteOpts) -> ExitCode {
-    let Some(pool) = get_pool().await else {
-        return  ExitCode::FAILURE;
-    };
+fn spawn_executor(pool: &Pool<Postgres>, executor_config: &ExecutorConfig) {
+    let pool_loop = pool.clone();
+    let executor_config_loop = executor_config.clone();
 
-    let Some(executor_config) = get_executor_config().await else {
-        return  ExitCode::FAILURE;
-    };
+    tracing::info!("Starting scheduler loop");
 
-    let sched = Scheduler { pool: pool.clone() };
-    let secrets = SecretsCrud { pool };
+    tokio::spawn(async move {
+        let sched = Scheduler::new(pool_loop.clone());
+        let secrets = SecretsCrud { pool: pool_loop };
 
-    for dag_file_path in execute_opts.files.iter() {
-        let contents = match fs::read_to_string(dag_file_path).await {
-            Ok(contents) => contents,
-            Err(error) => {
-                tracing::error!(%error, "Unable to read file {}", dag_file_path);
-                return ExitCode::FAILURE;
-            }
-        };
-
-        let flow = match serde_yaml::from_str::<Flow>(&contents) {
-            Ok(flow) => flow,
-            Err(error) => {
-                tracing::error!(%error, "Unable to parse YAML in file {}", dag_file_path);
-                return ExitCode::FAILURE;
-            }
-        };
-
-        match instantiate_flow(flow, &sched).await {
-            Ok(_) => (),
-            Err(error) => {
-                tracing::error!(%error, "Error instantiating flow");
-                tracing::warn!("Skipping flow file {}", dag_file_path);
-            }
-        };
-    }
-
-    loop {
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-
-        schedule_and_run_tasks(&sched, &executor_config, &secrets).await;
-    }
+        loop {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            schedule_and_run_tasks(&sched, &executor_config_loop, &secrets).await;
+        }
+    });
 }
 
 #[tracing::instrument]
@@ -130,24 +99,7 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let pool_loop = pool.clone();
-    let executor_config_loop = executor_config.clone();
-
-    tracing::info!("Starting scheduler loop");
-
-    tokio::spawn(async move {
-        let sched = Scheduler {
-            pool: pool_loop.clone(),
-        };
-        let secrets = SecretsCrud {
-            pool: pool_loop.clone(),
-        };
-
-        loop {
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&sched, &executor_config_loop, &secrets).await;
-        }
-    });
+    spawn_executor(&pool, &executor_config);
 
     tracing::info!("Starting API server");
 
@@ -188,7 +140,6 @@ async fn main() -> ExitCode {
     match args.command {
         args::Command::Init(init_opts) => do_init(init_opts.src, init_opts.dest).await,
         args::Command::Task(task_opts) => task_main(task_opts).await,
-        args::Command::Execute(execute_opts) => execute_main(execute_opts).await,
         args::Command::Server(server_opts) => run_server(server_opts).await,
     }
 }

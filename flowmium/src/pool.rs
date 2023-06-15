@@ -36,3 +36,22 @@ pub fn check_rows_updated<T>(rows_updated: u64, error: T) -> Result<(), T> {
 
     Ok(())
 }
+
+#[cfg(test)]
+pub async fn get_test_pool(tables_to_clear: &'static [&'static str]) -> Pool<Postgres> {
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://flowmium:flowmium@localhost/flowmium")
+        .await
+        .unwrap();
+
+    for table in tables_to_clear {
+        // Only used in tests, no need to worry about SQL injection
+        sqlx::query(format!("DELETE from {};", table).as_str())
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    return pool;
+}

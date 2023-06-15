@@ -106,28 +106,14 @@ impl SecretsCrud {
 #[cfg(test)]
 mod tests {
 
-    use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-
-    use crate::secrets::{SecretsCrud, SecretsCrudError};
-
-    pub async fn get_test_pool() -> Pool<Postgres> {
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
-        sqlx::query!("DELETE from secrets;")
-            .execute(&pool)
-            .await
-            .unwrap();
-
-        return pool;
-    }
+    use crate::{
+        pool::get_test_pool,
+        secrets::{SecretsCrud, SecretsCrudError},
+    };
 
     #[tokio::test]
     async fn test_secrets_crud() {
-        let pool = get_test_pool().await;
+        let pool = get_test_pool(["secrets"].as_slice()).await;
 
         let test_crud = SecretsCrud { pool };
 

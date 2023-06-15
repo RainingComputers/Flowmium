@@ -35,6 +35,11 @@ openssl = { version = "0.10", features = ["vendored"] }
 thiserror = "1.0.40"
 actix-web = "4"
 argh = "0.1.10"
+actix-web-actors = "4.2.0"
+actix = "0.13.0"
+tokio-stream = { version = "0.1.14", features = ["sync"]}
+bytestring = "1.3.0"
+
 
 [dev-dependencies]
 serial_test = "*"

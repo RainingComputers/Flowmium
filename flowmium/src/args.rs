@@ -12,7 +12,6 @@ pub struct FlowmiumOptions {
 pub enum Command {
     Init(InitOpts),
     Task(TaskOpts),
-    Execute(ExecuteOpts),
     Server(ServerOpts),
 }
 
@@ -35,15 +34,6 @@ pub struct InitOpts {
     #[argh(positional)]
     /// shared volume destination to where the flowmium executable should be copied
     pub dest: String,
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "execute")]
-/// Run YAML dag job with a temporary local executor without the API server
-pub struct ExecuteOpts {
-    #[argh(greedy, positional)]
-    /// list of paths to YAML files containing flow definitions
-    pub files: Vec<String>,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]

@@ -425,24 +425,14 @@ mod tests {
     use kube::api::DeleteParams;
     use s3::Bucket;
     use serial_test::serial;
-    use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 
     use crate::{
         artefacts::bucket::get_bucket,
         flow::model::{Input, Output},
+        pool::get_test_pool,
     };
 
     use super::*;
-
-    async fn get_test_pool() -> Pool<Postgres> {
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://flowmium:flowmium@localhost/flowmium")
-            .await
-            .unwrap();
-
-        return pool;
-    }
 
     fn test_pod_config() -> TaskPodConfig {
         TaskPodConfig {
@@ -638,9 +628,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_schedule_and_run_tasks() {
-        let pool = get_test_pool().await;
+        let pool = get_test_pool(&["flows", "secrets"]).await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let sched = Scheduler { pool: pool.clone() };
+
+        let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud { pool };
 
         secrets
@@ -733,9 +724,10 @@ mod tests {
         delete_all_pods().await;
         delete_all_jobs().await;
 
-        let pool = get_test_pool().await;
+        let pool = get_test_pool(&["flows", "secrets"]).await;
         let config = ExecutorConfig::create_default_config(test_pod_config());
-        let sched = Scheduler { pool: pool.clone() };
+
+        let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud { pool };
 
         let flow_id = instantiate_flow(test_flow_fail(), &sched).await.unwrap();

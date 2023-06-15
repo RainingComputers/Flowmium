@@ -3,11 +3,16 @@ use actix_web::{
     http::StatusCode,
     post, put,
     web::{self},
-    App, HttpResponse, HttpServer, ResponseError,
+    App, HttpRequest, HttpResponse, HttpServer, ResponseError,
 };
 use s3::Bucket;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
+use tokio::sync::broadcast;
+
+use actix::{Actor, AsyncContext, SpawnHandle, StreamHandler};
+use actix_web_actors::ws;
+use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 
 use crate::{
     args::ServerOpts,
@@ -15,7 +20,7 @@ use crate::{
     flow::{
         executor::{instantiate_flow, ExecutorConfig, ExecutorError},
         model::Flow,
-        scheduler::{FlowRecord, Scheduler, SchedulerError},
+        scheduler::{FlowRecord, Scheduler, SchedulerError, SchedulerEvent},
     },
     secrets::{SecretsCrud, SecretsCrudError},
 };
@@ -150,13 +155,93 @@ async fn update_secret(
     Ok("")
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
+enum SchedulerWebsocketEvent {
+    Event(SchedulerEvent),
+    LagError(u64),
+    InternalServerError,
+}
+
+struct SchedulerWebsocket {
+    rx: Option<broadcast::Receiver<SchedulerEvent>>,
+    spawn_handle: Option<SpawnHandle>,
+}
+
+impl Actor for SchedulerWebsocket {
+    type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        // NOTE: This function will only be called once, so unwrap() is okay
+        let rx = self.rx.take().unwrap();
+
+        let rx_event_to_json =
+            |event_result: Result<SchedulerEvent, BroadcastStreamRecvError>| match event_result {
+                Ok(event) => serde_json::to_string(&SchedulerWebsocketEvent::Event(event)),
+                Err(error) => match error {
+                    BroadcastStreamRecvError::Lagged(count) => {
+                        serde_json::to_string(&SchedulerWebsocketEvent::LagError(count))
+                    }
+                },
+            };
+
+        let unwrap_serde_result =
+            |str_event_result: serde_json::Result<String>| match str_event_result {
+                Ok(string) => string,
+                Err(_) => {
+                    serde_json::to_string(&SchedulerWebsocketEvent::InternalServerError).unwrap()
+                }
+            };
+
+        let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
+            .map(rx_event_to_json)
+            .map(unwrap_serde_result)
+            .map(bytestring::ByteString::from)
+            .map(ws::Message::Text)
+            .map(Ok);
+
+        self.spawn_handle = Some(ctx.add_stream(stream));
+    }
+}
+
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SchedulerWebsocket {
+
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        println!("Print works yeah");
+
+        match msg {
+            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Text(text)) => ctx.text(text),
+            _ => (),
+        }
+    }
+}
+
+#[get("/scheduler/ws")]
+async fn listen_to_scheduler(
+    req: HttpRequest,
+    stream: web::Payload,
+    sched: web::Data<Scheduler>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let resp = ws::start(
+        SchedulerWebsocket {
+            rx: Some(sched.subscribe()),
+            spawn_handle: None,
+        },
+        &req,
+        stream,
+    );
+
+    resp
+}
+
 pub async fn start_server(
     server_opts: ServerOpts,
     pool: Pool<Postgres>,
     executor_config: ExecutorConfig,
     bucket: Bucket,
 ) -> std::io::Result<()> {
-    let sched = Scheduler { pool: pool.clone() };
+    let sched = Scheduler::new(pool.clone());
     let secrets = SecretsCrud { pool: pool.clone() };
 
     HttpServer::new(move || {
@@ -174,7 +259,8 @@ pub async fn start_server(
                     .service(download_artefact)
                     .service(create_secret)
                     .service(update_secret)
-                    .service(delete_secret),
+                    .service(delete_secret)
+                    .service(listen_to_scheduler),
             )
     })
     .bind(("0.0.0.0", server_opts.port))?

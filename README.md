@@ -63,22 +63,8 @@ Run the below commands to run an [example python flow](framework/test.py)
 
 ### Features
 
-- [ ] Workers in executor
-- [ ] Workers in the framework
-- [ ] Secrets in executor
-- [ ] Secrets in the framework
-- [ ] Remove credentials from logs
-- [ ] Environment variables in framework
+- [ ] Workers
 
 ### Bugs
 
 - [ ] Handle unknown pod statuses
-
-### API
-
-- [x] `POST /api/v1/job`
-- [x] `GET /api/v1/job/` and `GET /api/v1/job/{name}`
-- [ ] `POST /api/v1/secret` and `PUT /api/v1/secret`
-- [ ] `GET /api/v1/secret/`
-- [ ] `DELETE /api/v1/secret`
-- [x] `GET /api/v1/artefact/{id}/{output_name}`
