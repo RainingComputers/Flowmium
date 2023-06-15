@@ -156,9 +156,8 @@ async fn update_secret(
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-enum SchedulerWebsocketEvent {
-    Event(SchedulerEvent),
+#[serde(rename_all = "snake_case", tag = "type", content = "detail")]
+enum SchedulerRecvError {
     LagError(u64),
     InternalServerError,
 }
@@ -177,10 +176,10 @@ impl Actor for SchedulerWebsocket {
 
         let rx_event_to_json =
             |event_result: Result<SchedulerEvent, BroadcastStreamRecvError>| match event_result {
-                Ok(event) => serde_json::to_string(&SchedulerWebsocketEvent::Event(event)),
+                Ok(event) => serde_json::to_string(&event),
                 Err(error) => match error {
                     BroadcastStreamRecvError::Lagged(count) => {
-                        serde_json::to_string(&SchedulerWebsocketEvent::LagError(count))
+                        serde_json::to_string(&SchedulerRecvError::LagError(count))
                     }
                 },
             };
@@ -188,9 +187,7 @@ impl Actor for SchedulerWebsocket {
         let unwrap_serde_result =
             |str_event_result: serde_json::Result<String>| match str_event_result {
                 Ok(string) => string,
-                Err(_) => {
-                    serde_json::to_string(&SchedulerWebsocketEvent::InternalServerError).unwrap()
-                }
+                Err(_) => serde_json::to_string(&SchedulerRecvError::InternalServerError).unwrap(),
             };
 
         let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
@@ -205,10 +202,7 @@ impl Actor for SchedulerWebsocket {
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SchedulerWebsocket {
-
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        println!("Print works yeah");
-
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) => ctx.text(text),
@@ -238,10 +232,11 @@ async fn listen_to_scheduler(
 pub async fn start_server(
     server_opts: ServerOpts,
     pool: Pool<Postgres>,
+    sched: &Scheduler,
     executor_config: ExecutorConfig,
     bucket: Bucket,
 ) -> std::io::Result<()> {
-    let sched = Scheduler::new(pool.clone());
+    let sched = sched.clone();
     let secrets = SecretsCrud { pool: pool.clone() };
 
     HttpServer::new(move || {

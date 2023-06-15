@@ -68,19 +68,19 @@ fn get_bucket_from_executor_config(
     );
 }
 
-fn spawn_executor(pool: &Pool<Postgres>, executor_config: &ExecutorConfig) {
+fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &ExecutorConfig) {
     let pool_loop = pool.clone();
+    let sched_loop = sched.clone();
     let executor_config_loop = executor_config.clone();
 
     tracing::info!("Starting scheduler loop");
 
     tokio::spawn(async move {
-        let sched = Scheduler::new(pool_loop.clone());
         let secrets = SecretsCrud { pool: pool_loop };
 
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            schedule_and_run_tasks(&sched, &executor_config_loop, &secrets).await;
+            schedule_and_run_tasks(&sched_loop, &executor_config_loop, &secrets).await;
         }
     });
 }
@@ -99,11 +99,15 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    spawn_executor(&pool, &executor_config);
+    let sched = Scheduler::new(pool.clone());
+
+    spawn_executor(&pool, &sched, &executor_config);
 
     tracing::info!("Starting API server");
 
-    if let Err(error) = start_server(server_opts, pool.clone(), executor_config, bucket).await {
+    if let Err(error) =
+        start_server(server_opts, pool.clone(), &sched, executor_config, bucket).await
+    {
         tracing::error!(%error, "Unable to start server");
         return ExitCode::FAILURE;
     }

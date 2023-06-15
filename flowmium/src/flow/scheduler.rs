@@ -44,7 +44,7 @@ pub struct FlowRecord {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Running,
     Failed,
@@ -52,9 +52,16 @@ pub enum TaskStatus {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(rename_all = "snake_case", tag = "type", content = "detail")]
 pub enum SchedulerEvent {
-    TaskStatusUpdateEvent(i32, i32, TaskStatus),
-    FlowCreatedEvent(i32),
+    TaskStatusUpdateEvent {
+        flow_id: i32,
+        task_id: i32,
+        status: TaskStatus,
+    },
+    FlowCreatedEvent {
+        flow_id: i32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +141,9 @@ impl Scheduler {
             }
         };
 
-        let _ = self.tx.send(SchedulerEvent::FlowCreatedEvent(id));
+        let _ = self
+            .tx
+            .send(SchedulerEvent::FlowCreatedEvent { flow_id: id });
 
         return Ok(id);
     }
@@ -168,11 +177,11 @@ impl Scheduler {
 
         check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
 
-        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
             task_id,
-            TaskStatus::Running,
-        ));
+            status: TaskStatus::Running,
+        });
 
         Ok(())
     }
@@ -212,11 +221,11 @@ impl Scheduler {
 
         check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
 
-        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
             task_id,
-            TaskStatus::Finished,
-        ));
+            status: TaskStatus::Finished,
+        });
 
         Ok(())
     }
@@ -246,11 +255,11 @@ impl Scheduler {
 
         check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
 
-        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent(
+        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
             task_id,
-            TaskStatus::Failed,
-        ));
+            status: TaskStatus::Failed,
+        });
 
         Ok(())
     }
@@ -469,6 +478,18 @@ mod tests {
         }
     }
 
+    fn create_task_status_update_event(
+        flow_id: i32,
+        task_id: i32,
+        status: TaskStatus,
+    ) -> SchedulerEvent {
+        SchedulerEvent::TaskStatusUpdateEvent {
+            flow_id,
+            task_id,
+            status,
+        }
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_scheduler() {
@@ -588,18 +609,18 @@ mod tests {
         );
 
         let expected_events = vec![
-            SchedulerEvent::FlowCreatedEvent(flow_id_0),
-            SchedulerEvent::FlowCreatedEvent(flow_id_1),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 0, TaskStatus::Running),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 0, TaskStatus::Finished),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 1, TaskStatus::Running),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 2, TaskStatus::Running),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 1, TaskStatus::Finished),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 2, TaskStatus::Finished),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 3, TaskStatus::Running),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_0, 3, TaskStatus::Finished),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_1, 0, TaskStatus::Running),
-            SchedulerEvent::TaskStatusUpdateEvent(flow_id_1, 0, TaskStatus::Failed),
+            SchedulerEvent::FlowCreatedEvent { flow_id: flow_id_0 },
+            SchedulerEvent::FlowCreatedEvent { flow_id: flow_id_1 },
+            create_task_status_update_event(flow_id_0, 0, TaskStatus::Running),
+            create_task_status_update_event(flow_id_0, 0, TaskStatus::Finished),
+            create_task_status_update_event(flow_id_0, 1, TaskStatus::Running),
+            create_task_status_update_event(flow_id_0, 2, TaskStatus::Running),
+            create_task_status_update_event(flow_id_0, 1, TaskStatus::Finished),
+            create_task_status_update_event(flow_id_0, 2, TaskStatus::Finished),
+            create_task_status_update_event(flow_id_0, 3, TaskStatus::Running),
+            create_task_status_update_event(flow_id_0, 3, TaskStatus::Finished),
+            create_task_status_update_event(flow_id_1, 0, TaskStatus::Running),
+            create_task_status_update_event(flow_id_1, 0, TaskStatus::Failed),
         ];
 
         for event in expected_events {

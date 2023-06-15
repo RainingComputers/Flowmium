@@ -1,4 +1,3 @@
--- Add migration script here
 CREATE TABLE secrets (
     id SERIAL PRIMARY KEY,
     secret_key TEXT UNIQUE NOT NULL,
