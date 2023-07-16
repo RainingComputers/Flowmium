@@ -54,7 +54,10 @@ pub async fn run() -> ExitCode {
             .await
         }
         args::Command::Subscribe(subscribe_opts) => {
-            make_request(|| requests::subscribe(&args.url, subscribe_opts.secure)).await
+            make_request(|| {
+                requests::subscribe(&args.url, subscribe_opts.secure, |msg| println!("{}", msg))
+            })
+            .await
         }
     };
 

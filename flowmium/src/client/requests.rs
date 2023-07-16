@@ -140,7 +140,10 @@ fn get_ws_scheme(secure: bool) -> &'static str {
     return "ws";
 }
 
-pub async fn subscribe(url: &str, secure: bool) -> Result<(), ClientError> {
+pub async fn subscribe<F>(url: &str, secure: bool, on_message: F) -> Result<(), ClientError>
+where
+    F: Fn(String),
+{
     let mut abs_url = get_abs_url(url, "/api/v1/scheduler/ws")?;
 
     if let Err(_) = abs_url.set_scheme(get_ws_scheme(secure)) {
@@ -151,8 +154,9 @@ pub async fn subscribe(url: &str, secure: bool) -> Result<(), ClientError> {
 
     while let Some(msg) = ws_stream.next().await {
         let msg = msg?;
-        if msg.is_text() || msg.is_binary() {
-            println!("{}", msg);
+
+        if msg.is_text() {
+            on_message(msg.to_string());
         }
     }
 
