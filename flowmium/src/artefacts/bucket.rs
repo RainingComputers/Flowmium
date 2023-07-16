@@ -14,7 +14,7 @@ pub fn get_bucket(
             Ok(creds) => creds,
             Err(error) => {
                 tracing::error!(%error, "Unable to create creds for bucket");
-                return Err(ArtefactError::UnableToOpenBucketError(
+                return Err(ArtefactError::UnableToOpenBucket(
                     s3::error::S3Error::Credentials(error),
                 ));
             }
@@ -29,7 +29,7 @@ pub fn get_bucket(
         Ok(bucket) => bucket.with_path_style(),
         Err(error) => {
             tracing::error!(%error, "Unable to open bucket");
-            return Err(ArtefactError::UnableToOpenBucketError(error));
+            return Err(ArtefactError::UnableToOpenBucket(error));
         }
     };
 
@@ -64,7 +64,7 @@ pub async fn get_artefact(
 
     if status_code == 404 {
         tracing::error!("Got 404 response while downloading artefact");
-        return Err(ArtefactError::ArtefactDoesNotExistError(store_path));
+        return Err(ArtefactError::ArtefactDoesNotExist(store_path));
     }
 
     if status_code != 200 {
@@ -72,7 +72,7 @@ pub async fn get_artefact(
             "Response was non ok code {} while downloading artefact",
             status_code
         );
-        return Err(ArtefactError::UnableToDownloadInputApiError(status_code));
+        return Err(ArtefactError::UnableToDownloadInputApi(status_code));
     }
 
     return Ok(response);
@@ -132,7 +132,7 @@ pub async fn upload_output(
             "Response was non ok code {} while uploading output",
             status_cost
         );
-        return Err(ArtefactError::UnableToUploadArtifactApiError(status_cost));
+        return Err(ArtefactError::UnableToUploadArtifactApi(status_cost));
     }
 
     return Ok(());

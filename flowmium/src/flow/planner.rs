@@ -5,15 +5,15 @@ use thiserror::Error;
 #[derive(Error, Debug, PartialEq)]
 pub enum PlannerError {
     #[error("cyclic dependencies found at task {0}")]
-    CyclicDependenciesError(usize),
+    CyclicDependencies(usize),
     #[error("dependent task {0} does not exist")]
-    DependentTaskDoesNotExistError(String),
+    DependentTaskDoesNotExist(String),
     #[error("output {0} not unique")]
-    OutputNotUniqueError(String),
+    OutputNotUnique(String),
     #[error("input ref {1} for task {0} not from a parent task")]
-    OutputNotFromParentError(String, String),
+    OutputNotFromParent(String, String),
     #[error("input ref {1} for task {0} does not exist")]
-    OutputDoesNotExistError(String, String),
+    OutputDoesNotExist(String, String),
 }
 
 #[derive(PartialEq, Debug)]
@@ -43,7 +43,7 @@ fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
 
         for dep in task.depends.iter() {
             let child_node_id = match task_id_map.get(&dep) {
-                None => return Err(PlannerError::DependentTaskDoesNotExistError(dep.clone())),
+                None => return Err(PlannerError::DependentTaskDoesNotExist(dep.clone())),
                 Some(id) => *id,
             };
 
@@ -174,7 +174,7 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
         for outputs in &task.outputs {
             for output in outputs {
                 if let Some(_) = output_task_name_map.insert(&output.name, task_id) {
-                    return Err(PlannerError::OutputNotUniqueError(output.name.clone()));
+                    return Err(PlannerError::OutputNotUnique(output.name.clone()));
                 }
             }
         }
@@ -184,11 +184,11 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
         for inputs in &task.inputs {
             for input in inputs {
                 let Some(from_task_id) = output_task_name_map.get(&input.from) else {
-                    return Err(PlannerError::OutputDoesNotExistError(  task.name.clone(), input.from.clone()));
+                    return Err(PlannerError::OutputDoesNotExist(  task.name.clone(), input.from.clone()));
                 };
 
                 if !nodes[task_id].children.contains(from_task_id) {
-                    return Err(PlannerError::OutputNotFromParentError(
+                    return Err(PlannerError::OutputNotFromParent(
                         task.name.clone(),
                         input.from.clone(),
                     ));
@@ -204,7 +204,7 @@ pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, Planner
     let nodes = construct_nodes(tasks)?;
 
     if let Some(node_id) = is_cyclic(&nodes) {
-        return Err(PlannerError::CyclicDependenciesError(node_id));
+        return Err(PlannerError::CyclicDependencies(node_id));
     }
 
     valid_input_outputs(tasks, &nodes)?;
@@ -412,7 +412,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputNotUniqueError("foo".to_owned()));
+        let expected = Err(PlannerError::OutputNotUnique("foo".to_owned()));
         assert_eq!(actual, expected);
     }
 
@@ -450,7 +450,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputDoesNotExistError(
+        let expected = Err(PlannerError::OutputDoesNotExist(
             "B".to_owned(),
             "doesNotExist".to_owned(),
         ));
@@ -509,7 +509,7 @@ mod tests {
 
         let actual = construct_plan(&test_tasks);
 
-        let expected = Err(PlannerError::OutputNotFromParentError(
+        let expected = Err(PlannerError::OutputNotFromParent(
             "C".to_owned(),
             "foo".to_owned(),
         ));

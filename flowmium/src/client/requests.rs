@@ -10,19 +10,19 @@ use std::path::{Path, PathBuf};
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("invalid url error: {0}")]
-    InvalidUrlErr(
+    InvalidUrl(
         #[source]
         #[from]
         url::ParseError,
     ),
     #[error("request error: {0}")]
-    RequestErr(
+    RequestError(
         #[source]
         #[from]
         reqwest::Error,
     ),
     #[error("response not ok error: {0}")]
-    ResponseNotOkErr(String),
+    ResponseNotOk(String),
     #[error("io error: {0}")]
     IoError(
         #[source]
@@ -30,7 +30,7 @@ pub enum ClientError {
         std::io::Error,
     ),
     #[error("websocket error: {0}")]
-    WebsocketErr(
+    WebsocketError(
         #[source]
         #[from]
         tokio_tungstenite::tungstenite::Error,
@@ -63,7 +63,7 @@ pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> 
 
 pub async fn response_to_result(response: reqwest::Response) -> Result<(), ClientError> {
     if response.status() != 200 {
-        return Err(ClientError::ResponseNotOkErr(response.text().await?));
+        return Err(ClientError::ResponseNotOk(response.text().await?));
     }
 
     return Ok(());

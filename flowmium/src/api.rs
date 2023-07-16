@@ -28,7 +28,7 @@ use crate::{
 impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            ExecutorError::UnableToConstructPlanError(_) => StatusCode::BAD_REQUEST,
+            ExecutorError::UnableToConstructPlan(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -72,7 +72,7 @@ async fn get_single_job(
 impl ResponseError for ArtefactError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            ArtefactError::ArtefactDoesNotExistError(_) => StatusCode::BAD_REQUEST,
+            ArtefactError::ArtefactDoesNotExist(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

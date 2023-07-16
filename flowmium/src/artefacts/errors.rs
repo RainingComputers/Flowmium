@@ -9,13 +9,13 @@ pub enum ArtefactError {
     #[error("unable to download input: {0}")]
     UnableToDownloadInput(s3::error::S3Error),
     #[error("unable to download input api errored with status {0}")]
-    UnableToDownloadInputApiError(u16),
+    UnableToDownloadInputApi(u16),
     #[error("unable to write input: {0}")]
     UnableToWriteInput(std::io::Error),
     #[error("unable to open bucket: {0}")]
-    UnableToOpenBucketError(s3::error::S3Error),
+    UnableToOpenBucket(s3::error::S3Error),
     #[error("unable to upload output api errored with status {0}")]
-    UnableToUploadArtifactApiError(u16),
+    UnableToUploadArtifactApi(u16),
     #[error("artefact {0} does not exist")]
-    ArtefactDoesNotExistError(String),
+    ArtefactDoesNotExist(String),
 }
