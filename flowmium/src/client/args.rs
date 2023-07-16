@@ -18,6 +18,7 @@ pub enum Command {
     Status(StatusOpts),
     Download(DownloadOpts),
     Secret(SecretOpts),
+    Subscribe(SubscribeOpts),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -98,4 +99,13 @@ pub struct SecretUpdateOpts {
     #[argh(positional)]
     /// value for the secret
     pub value: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "subscribe")]
+/// subscribe to server's scheduler events
+pub struct SubscribeOpts {
+    #[argh(switch)]
+    /// use wss:// scheme instead of ws:// scheme
+    pub secure: bool,
 }

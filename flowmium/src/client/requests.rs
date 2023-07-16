@@ -1,5 +1,6 @@
 use crate::flow::scheduler::{FlowListRecord, FlowRecord};
 use thiserror::Error;
+use tokio_stream::StreamExt;
 use url::Url;
 
 use std::fs::File;
@@ -28,6 +29,14 @@ pub enum ClientError {
         #[from]
         std::io::Error,
     ),
+    #[error("websocket error: {0}")]
+    WebsocketErr(
+        #[source]
+        #[from]
+        tokio_tungstenite::tungstenite::Error,
+    ),
+    #[error("url scheme conversion error")]
+    UrlSchemeConversionError,
 }
 
 fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
@@ -121,4 +130,31 @@ pub async fn download_artefact(
     let num_bytes = copy(&mut content.as_bytes(), &mut file)?;
 
     Ok(BytesDownloaded(num_bytes))
+}
+
+fn get_ws_scheme(secure: bool) -> &'static str {
+    if secure {
+        return "wss";
+    }
+
+    return "ws";
+}
+
+pub async fn subscribe(url: &str, secure: bool) -> Result<(), ClientError> {
+    let mut abs_url = get_abs_url(url, "/api/v1/scheduler/ws")?;
+
+    if let Err(_) = abs_url.set_scheme(get_ws_scheme(secure)) {
+        return Err(ClientError::UrlSchemeConversionError);
+    };
+
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;
+
+    while let Some(msg) = ws_stream.next().await {
+        let msg = msg?;
+        if msg.is_text() || msg.is_binary() {
+            println!("{}", msg);
+        }
+    }
+
+    Ok(())
 }

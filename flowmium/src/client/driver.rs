@@ -53,6 +53,9 @@ pub async fn run() -> ExitCode {
             })
             .await
         }
+        args::Command::Subscribe(subscribe_opts) => {
+            make_request(|| requests::subscribe(&args.url, subscribe_opts.secure)).await
+        }
     };
 
     match formatted_req_resp {

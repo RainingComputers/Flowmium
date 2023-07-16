@@ -17,6 +17,7 @@
         "serde",
         "sqlx",
         "thiserror",
-        "timedout"
+        "timedout",
+        "tungstenite"
     ]
 }
