@@ -20,14 +20,31 @@ where
 pub async fn run() -> ExitCode {
     let args: args::FlowCtlOptions = argh::from_env();
 
-    let request_resp = match args.command {
-        args::Command::Ls(_) => make_request(|| requests::list_workflows(&args.url)).await,
+    let formatted_req_resp = match args.command {
+        args::Command::List(_) => make_request(|| requests::list_workflows(&args.url)).await,
         args::Command::Status(status_opts) => {
             make_request(|| requests::get_status(&args.url, &status_opts.id)).await
         }
+        args::Command::Secret(secret_opts) => match secret_opts.command {
+            args::SecretCommand::Create(create_opts) => {
+                make_request(|| {
+                    requests::create_secret(&args.url, &create_opts.key, &create_opts.value)
+                })
+                .await
+            }
+            args::SecretCommand::Update(update_opts) => {
+                make_request(|| {
+                    requests::update_secret(&args.url, &update_opts.key, &update_opts.value)
+                })
+                .await
+            }
+            args::SecretCommand::Delete(delete_opts) => {
+                make_request(|| requests::delete_secret(&args.url, &delete_opts.key)).await
+            }
+        },
     };
 
-    match request_resp {
+    match formatted_req_resp {
         Ok(string) => {
             println!("{}", string);
             ExitCode::SUCCESS

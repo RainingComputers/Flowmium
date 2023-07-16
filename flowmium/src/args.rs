@@ -1,7 +1,7 @@
 use argh::FromArgs;
 
 #[derive(FromArgs, PartialEq, Debug)]
-/// Flowmium, workflow orchestrator written in rust
+/// flowmium, workflow orchestrator written in rust
 pub struct FlowmiumOptions {
     #[argh(subcommand)]
     pub command: Command,
@@ -17,7 +17,7 @@ pub enum Command {
 
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "task")]
-/// Run flowmium task pod
+/// run flowmium task pod
 pub struct TaskOpts {
     #[argh(greedy, positional)]
     /// command for the task to run
@@ -26,7 +26,7 @@ pub struct TaskOpts {
 
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "init")]
-/// Run init container to copy the flowmium executable into the task container
+/// run init container to copy the flowmium executable into the task container
 pub struct InitOpts {
     #[argh(positional)]
     /// source of the flowmium executable in the init container
@@ -38,7 +38,7 @@ pub struct InitOpts {
 
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "server")]
-/// Start executor server
+/// start executor server
 pub struct ServerOpts {
     #[argh(option)]
     /// port for the API server

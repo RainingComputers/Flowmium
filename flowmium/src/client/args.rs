@@ -14,20 +14,70 @@ pub struct FlowCtlOptions {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 pub enum Command {
-    Ls(LsOpts),
+    List(LsOpts),
     Status(StatusOpts),
+    Secret(SecretOpts),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "ls")]
-/// List all workflows
+#[argh(subcommand, name = "list")]
+/// list all workflows
 pub struct LsOpts {}
 
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "status")]
-/// Get status of a workflow
+/// get status of a workflow
 pub struct StatusOpts {
     #[argh(positional)]
     /// id of the workflow
     pub id: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "secret")]
+/// manage secrets stored in the server
+pub struct SecretOpts {
+    #[argh(subcommand)]
+    pub command: SecretCommand,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
+pub enum SecretCommand {
+    Create(SecretCreateOpts),
+    Delete(SecretDeleteOpts),
+    Update(SecretUpdateOpts),
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "create")]
+/// create a secret
+pub struct SecretCreateOpts {
+    #[argh(positional)]
+    /// key for the secret
+    pub key: String,
+    #[argh(positional)]
+    /// value for the secret
+    pub value: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "delete")]
+/// delete a secret
+pub struct SecretDeleteOpts {
+    #[argh(positional)]
+    /// key for the secret
+    pub key: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "update")]
+/// update a secret
+pub struct SecretUpdateOpts {
+    #[argh(positional)]
+    /// key for the secret
+    pub key: String,
+    #[argh(positional)]
+    /// value for the secret
+    pub value: String,
 }
