@@ -20,7 +20,7 @@ use crate::{
     flow::{
         executor::{instantiate_flow, ExecutorConfig, ExecutorError},
         model::Flow,
-        scheduler::{FlowRecord, Scheduler, SchedulerError, SchedulerEvent},
+        scheduler::{FlowListRecord, FlowRecord, Scheduler, SchedulerError, SchedulerEvent},
     },
     secrets::{SecretsCrud, SecretsCrudError},
 };
@@ -53,28 +53,11 @@ impl ResponseError for SchedulerError {
     }
 }
 
-#[get("/job/running")]
-async fn get_running_jobs(
+#[get("/job")]
+async fn list_jobs(
     sched: web::Data<Scheduler>,
-) -> Result<web::Json<Vec<FlowRecord>>, SchedulerError> {
-    return sched.get_running_or_pending_flows().await.map(web::Json);
-}
-
-#[derive(Serialize, Deserialize)]
-struct OffsetLimitParams {
-    offset: i64,
-    limit: i64,
-}
-
-#[get("/job/terminated")]
-async fn get_terminated_jobs(
-    offset_limit: web::Query<OffsetLimitParams>,
-    sched: web::Data<Scheduler>,
-) -> Result<web::Json<Vec<FlowRecord>>, SchedulerError> {
-    return sched
-        .get_terminated_flows(offset_limit.offset, offset_limit.limit)
-        .await
-        .map(web::Json);
+) -> Result<web::Json<Vec<FlowListRecord>>, SchedulerError> {
+    return sched.list_flows().await.map(web::Json);
 }
 
 #[get("/job/{id}")]
@@ -248,8 +231,7 @@ pub async fn start_server(
             .service(
                 web::scope("/api/v1")
                     .service(create_job)
-                    .service(get_running_jobs)
-                    .service(get_terminated_jobs)
+                    .service(list_jobs)
                     .service(get_single_job)
                     .service(download_artefact)
                     .service(create_secret)

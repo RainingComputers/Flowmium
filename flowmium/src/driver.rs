@@ -1,25 +1,18 @@
-mod api;
-mod args;
-mod artefacts;
-mod flow;
-mod pool;
-mod secrets;
-
-use api::start_server;
-use artefacts::{
+use crate::api::start_server;
+use crate::artefacts::{
     bucket::get_bucket,
     errors::ArtefactError,
     init::do_init,
     task::{run_task, SidecarConfig},
 };
-use pool::{init_db_and_get_pool, PostgresConfig};
+use crate::pool::{init_db_and_get_pool, PostgresConfig};
+use crate::secrets::SecretsCrud;
 use s3::Bucket;
-use secrets::SecretsCrud;
 use sqlx::{Pool, Postgres};
 use std::{process::ExitCode, time::Duration};
 
-use args::{ServerOpts, TaskOpts};
-use flow::{
+use crate::args::{self, ServerOpts, TaskOpts};
+use crate::flow::{
     executor::{schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
     scheduler::Scheduler,
 };
@@ -128,8 +121,7 @@ async fn task_main(task_opts: TaskOpts) -> ExitCode {
     return run_task(config, task_opts.cmd).await;
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+pub async fn run() -> ExitCode {
     let subscriber = tracing_subscriber::fmt().with_line_number(true).finish();
     match tracing::subscriber::set_global_default(subscriber) {
         Ok(()) => (),

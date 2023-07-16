@@ -43,6 +43,13 @@ pub struct FlowRecord {
     status: FlowStatus,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct FlowListRecord {
+    id: i32,
+    flow_name: String,
+    status: FlowStatus,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
@@ -298,15 +305,13 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_running_or_pending_flows(&self) -> Result<Vec<FlowRecord>, SchedulerError> {
+    pub async fn list_flows(&self) -> Result<Vec<FlowListRecord>, SchedulerError> {
         let flows = match sqlx::query_as!(
-            FlowRecord,
+            FlowListRecord,
             r#"
             SELECT 
-                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks, 
-                task_definitions, flow_name, status AS "status: FlowStatus"
+                id, flow_name, status AS "status: FlowStatus"
             FROM flows
-            WHERE status IN ('running', 'pending')
             ORDER BY id ASC
             LIMIT 1000;
             "#
