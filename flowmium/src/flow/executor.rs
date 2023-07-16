@@ -114,7 +114,6 @@ async fn get_env_json(
         }
         EnvVar::SecretRef(SecretRef { name, from_secret }) => {
             Ok(serde_json::json! ({"name": name, "value": secrets.get_secret(from_secret).await?}))
-            // TODO: Actually fetch secret
         }
     }
 }
