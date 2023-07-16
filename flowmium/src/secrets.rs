@@ -9,7 +9,7 @@ pub enum SecretsCrudError {
     #[error("secret {0} does not exist")]
     SecretDoesNotExist(String),
     #[error("secret {0} already exists error")]
-    SecretAlreadyExistsError(String),
+    SecretAlreadyExists(String),
     #[error("database query error: {0}")]
     DatabaseQueryError(#[source] sqlx::error::Error),
 }
@@ -36,7 +36,7 @@ impl SecretsCrud {
 
                     if let Some(code) = database_error_optional {
                         if code.into_owned() == "23505" {
-                            return Err(SecretsCrudError::SecretAlreadyExistsError(key));
+                            return Err(SecretsCrudError::SecretAlreadyExists(key));
                         }
                     }
                 }
@@ -134,7 +134,7 @@ mod tests {
             .await;
 
         match r1.unwrap_err() {
-            SecretsCrudError::SecretAlreadyExistsError(key) => assert_eq!(key, "foo"),
+            SecretsCrudError::SecretAlreadyExists(key) => assert_eq!(key, "foo"),
             _ => panic!(),
         };
 
