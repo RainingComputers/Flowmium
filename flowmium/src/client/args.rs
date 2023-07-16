@@ -16,6 +16,7 @@ pub struct FlowCtlOptions {
 pub enum Command {
     List(LsOpts),
     Status(StatusOpts),
+    Download(DownloadOpts),
     Secret(SecretOpts),
 }
 
@@ -31,6 +32,23 @@ pub struct StatusOpts {
     #[argh(positional)]
     /// id of the workflow
     pub id: String,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "download")]
+/// download output from a workflow
+pub struct DownloadOpts {
+    #[argh(positional)]
+    /// if of the workflow
+    pub id: String,
+
+    #[argh(positional)]
+    /// name of the output from the workflow
+    pub name: String,
+
+    #[argh(positional)]
+    /// local directory path to download the output to
+    pub local_dir_path: String,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]

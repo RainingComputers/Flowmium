@@ -2,6 +2,10 @@ use crate::flow::scheduler::{FlowListRecord, FlowRecord};
 use thiserror::Error;
 use url::Url;
 
+use std::fs::File;
+use std::io::copy;
+use std::path::{Path, PathBuf};
+
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("invalid url error: {0}")]
@@ -18,6 +22,12 @@ pub enum ClientError {
     ),
     #[error("response not ok error: {0}")]
     ResponseNotOkErr(String),
+    #[error("io error: {0}")]
+    IoError(
+        #[source]
+        #[from]
+        std::io::Error,
+    ),
 }
 
 fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
@@ -72,4 +82,43 @@ pub async fn delete_secret(url: &str, key: &str) -> Result<(), ClientError> {
     let client = reqwest::Client::new();
 
     response_to_result(client.delete(abs_url).send().await?).await
+}
+
+fn get_path_from_response_url(
+    response: &reqwest::Response,
+    dir_path: &str,
+    default_name: &str,
+) -> PathBuf {
+    let file_name = response
+        .url()
+        .path_segments()
+        .and_then(|segments| segments.last())
+        .and_then(|name| if name.is_empty() { None } else { Some(name) })
+        .unwrap_or(&default_name);
+
+    Path::new(dir_path).join(file_name)
+}
+
+#[derive(Debug)]
+pub struct BytesDownloaded(u64);
+
+pub async fn download_artefact(
+    url: &str,
+    id: &str,
+    name: &str,
+    dest: &str,
+) -> Result<BytesDownloaded, ClientError> {
+    let abs_url = get_abs_url(url, &format!("/api/v1/artefact/{}/{}", id, name))?;
+
+    let response = reqwest::get(abs_url).await?;
+
+    let file_path = get_path_from_response_url(&response, dest, &format!("flow-{}-output", id));
+
+    let content = response.text().await?;
+
+    let mut file = File::create(file_path)?;
+
+    let num_bytes = copy(&mut content.as_bytes(), &mut file)?;
+
+    Ok(BytesDownloaded(num_bytes))
 }

@@ -42,6 +42,17 @@ pub async fn run() -> ExitCode {
                 make_request(|| requests::delete_secret(&args.url, &delete_opts.key)).await
             }
         },
+        args::Command::Download(download_opts) => {
+            make_request(|| {
+                requests::download_artefact(
+                    &args.url,
+                    &download_opts.id,
+                    &download_opts.name,
+                    &download_opts.local_dir_path,
+                )
+            })
+            .await
+        }
     };
 
     match formatted_req_resp {
