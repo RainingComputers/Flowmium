@@ -9,6 +9,7 @@
         "dependee",
         "flowctl",
         "flowmium",
+        "getset",
         "minio",
         "openapi",
         "peekable",

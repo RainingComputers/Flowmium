@@ -1,4 +1,5 @@
 use crate::flow::scheduler::{FlowListRecord, FlowRecord};
+use getset::Getters;
 use thiserror::Error;
 use tokio_stream::StreamExt;
 use url::Url;
@@ -36,8 +37,40 @@ pub enum ClientError {
         tokio_tungstenite::tungstenite::Error,
     ),
     #[error("url scheme conversion error")]
-    UrlSchemeConversionError,
+    UrlSchemeConversionErr,
 }
+
+#[derive(Getters, Debug)]
+pub struct FlowList {
+    #[getset(get = "pub")]
+    list: Vec<FlowListRecord>,
+}
+
+impl IntoIterator for FlowList {
+    type Item = FlowListRecord;
+    type IntoIter = std::vec::IntoIter<FlowListRecord>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.list.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a FlowList {
+    type Item = &'a FlowListRecord;
+    type IntoIter = std::slice::Iter<'a, FlowListRecord>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.list.iter()
+    }
+}
+
+#[derive(Getters, Debug)]
+pub struct BytesDownloaded {
+    #[getset(get = "pub")]
+    bytes: u64,
+}
+
+pub struct Okay();
 
 fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
     let base = Url::parse(url)?;
@@ -46,13 +79,15 @@ fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
     Ok(joined)
 }
 
-pub async fn list_workflows(url: &str) -> Result<Vec<FlowListRecord>, ClientError> {
+pub async fn list_workflows(url: &str) -> Result<FlowList, ClientError> {
     let abs_url = get_abs_url(url, "/api/v1/job")?;
 
-    Ok(reqwest::get(abs_url)
-        .await?
-        .json::<Vec<FlowListRecord>>()
-        .await?)
+    Ok(FlowList {
+        list: reqwest::get(abs_url)
+            .await?
+            .json::<Vec<FlowListRecord>>()
+            .await?,
+    })
 }
 
 pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> {
@@ -61,15 +96,15 @@ pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> 
     Ok(reqwest::get(abs_url).await?.json::<FlowRecord>().await?)
 }
 
-pub async fn response_to_result(response: reqwest::Response) -> Result<(), ClientError> {
+pub async fn response_to_result(response: reqwest::Response) -> Result<Okay, ClientError> {
     if response.status() != 200 {
         return Err(ClientError::ResponseNotOk(response.text().await?));
     }
 
-    return Ok(());
+    Ok(Okay())
 }
 
-pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<(), ClientError> {
+pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
     let client = reqwest::Client::new();
@@ -77,7 +112,7 @@ pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<(), Clie
     response_to_result(client.post(abs_url).json::<str>(value).send().await?).await
 }
 
-pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<(), ClientError> {
+pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
     let client = reqwest::Client::new();
@@ -85,7 +120,7 @@ pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<(), Clie
     response_to_result(client.put(abs_url).json::<str>(value).send().await?).await
 }
 
-pub async fn delete_secret(url: &str, key: &str) -> Result<(), ClientError> {
+pub async fn delete_secret(url: &str, key: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
     let client = reqwest::Client::new();
@@ -108,9 +143,6 @@ fn get_path_from_response_url(
     Path::new(dir_path).join(file_name)
 }
 
-#[derive(Debug)]
-pub struct BytesDownloaded(u64);
-
 pub async fn download_artefact(
     url: &str,
     id: &str,
@@ -129,7 +161,7 @@ pub async fn download_artefact(
 
     let num_bytes = copy(&mut content.as_bytes(), &mut file)?;
 
-    Ok(BytesDownloaded(num_bytes))
+    Ok(BytesDownloaded { bytes: num_bytes })
 }
 
 fn get_ws_scheme(secure: bool) -> &'static str {
@@ -140,14 +172,14 @@ fn get_ws_scheme(secure: bool) -> &'static str {
     return "ws";
 }
 
-pub async fn subscribe<F>(url: &str, secure: bool, on_message: F) -> Result<(), ClientError>
+pub async fn subscribe<F>(url: &str, secure: bool, on_message: F) -> Result<Okay, ClientError>
 where
     F: Fn(String),
 {
     let mut abs_url = get_abs_url(url, "/api/v1/scheduler/ws")?;
 
     if let Err(_) = abs_url.set_scheme(get_ws_scheme(secure)) {
-        return Err(ClientError::UrlSchemeConversionError);
+        return Err(ClientError::UrlSchemeConversionErr);
     };
 
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;
@@ -160,5 +192,5 @@ where
         }
     }
 
-    Ok(())
+    Ok(Okay())
 }

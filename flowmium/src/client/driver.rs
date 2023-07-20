@@ -9,10 +9,10 @@ use crate::client::requests::ClientError;
 pub async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
 where
     F: Future<Output = Result<T, ClientError>>,
-    T: std::fmt::Debug,
+    T: std::fmt::Display,
 {
     match req_func().await {
-        Ok(resp) => Ok(format!("{:?}", resp)),
+        Ok(resp) => Ok(format!("{}", resp)),
         Err(error) => Err(error),
     }
 }

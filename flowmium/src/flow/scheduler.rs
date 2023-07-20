@@ -1,3 +1,4 @@
+use getset::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
@@ -23,7 +24,7 @@ pub enum SchedulerError {
 
 #[derive(sqlx::Type, Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[sqlx(rename_all = "snake_case")]
-enum FlowStatus {
+pub enum FlowStatus {
     Pending,
     Running,
     Success,
@@ -43,10 +44,13 @@ pub struct FlowRecord {
     status: FlowStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Getters, Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct FlowListRecord {
+    #[getset(get = "pub")]
     id: i32,
+    #[getset(get = "pub")]
     flow_name: String,
+    #[getset(get = "pub")]
     status: FlowStatus,
 }
 
