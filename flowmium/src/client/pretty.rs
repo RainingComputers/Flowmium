@@ -29,12 +29,12 @@ impl fmt::Display for FlowStatus {
 
 impl fmt::Display for FlowList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{: <6} {: <40} {: <8}", "ID", "NAME", "STATUS")?;
+        writeln!(f, "{: <8} {: <40} {: <8}", "ID", "NAME", "STATUS")?;
 
         for rec in self {
-            write!(
+            writeln!(
                 f,
-                "{: <6} {: <40} {: <8}",
+                "{: <8} {: <40} {: <8}",
                 rec.id(),
                 rec.flow_name(),
                 rec.status()

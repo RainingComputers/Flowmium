@@ -5,7 +5,6 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 use std::fs::File;
-use std::io::copy;
 use std::path::{Path, PathBuf};
 
 #[derive(Error, Debug)]
@@ -159,7 +158,7 @@ pub async fn download_artefact(
 
     let mut file = File::create(file_path)?;
 
-    let num_bytes = copy(&mut content.as_bytes(), &mut file)?;
+    let num_bytes = std::io::copy(&mut content.as_bytes(), &mut file)?;
 
     Ok(BytesDownloaded { bytes: num_bytes })
 }

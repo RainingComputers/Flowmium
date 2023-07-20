@@ -1,5 +1,4 @@
 use s3::{creds::Credentials, request_trait::ResponseData, Bucket, Region};
-use tokio::{fs, io};
 
 use super::errors::ArtefactError;
 
@@ -36,7 +35,7 @@ pub fn get_bucket(
     return Ok(bucket);
 }
 
-pub async fn create_parent_directories(local_path: &String) -> io::Result<()> {
+pub async fn create_parent_directories(local_path: &String) -> tokio::io::Result<()> {
     let path = std::path::Path::new(&local_path);
     let prefix = match path.parent() {
         Some(parent) => parent,
@@ -45,7 +44,7 @@ pub async fn create_parent_directories(local_path: &String) -> io::Result<()> {
         }
     };
 
-    fs::create_dir_all(prefix).await
+    tokio::fs::create_dir_all(prefix).await
 }
 
 pub async fn get_artefact(
@@ -93,7 +92,7 @@ pub async fn download_input(
         return Err(ArtefactError::UnableToWriteInput(error));
     }
 
-    if let std::io::Result::Err(error) = fs::write(local_path, &response.bytes()).await {
+    if let std::io::Result::Err(error) = tokio::fs::write(local_path, &response.bytes()).await {
         tracing::error!(%error, "File error while downloading input");
         return Err(ArtefactError::UnableToWriteInput(error));
     }
@@ -109,7 +108,7 @@ pub async fn upload_output(
 ) -> Result<(), ArtefactError> {
     tracing::info!("Uploading output");
 
-    let content = match fs::read(local_path).await {
+    let content = match tokio::fs::read(local_path).await {
         Ok(content) => content,
         Err(error) => {
             tracing::error!(%error, "File error while uploading output");
