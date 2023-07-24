@@ -1,12 +1,15 @@
-use getset::Getters;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
-use crate::pool::check_rows_updated;
+use crate::{
+    flow::record::FlowListRecord,
+    flow::record::{FlowRecord, FlowStatus},
+    pool::check_rows_updated,
+};
 use tokio::sync::broadcast;
 
-use super::model::Task;
+use super::{model::Task, planner::Plan, record::TaskStatus};
 
 use thiserror::Error;
 
@@ -20,46 +23,6 @@ pub enum SchedulerError {
     FlowDoesNotExistError(i32),
     #[error("unable to serialize/deserialize JSON: {0}")]
     SerializeDeserializeError(#[source] serde_json::Error),
-}
-
-#[derive(sqlx::Type, Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[sqlx(rename_all = "snake_case")]
-pub enum FlowStatus {
-    Pending,
-    Running,
-    Success,
-    Failed,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct FlowRecord {
-    id: i32,
-    plan: serde_json::Value,
-    current_stage: i32,
-    running_tasks: Vec<i32>,
-    finished_tasks: Vec<i32>,
-    failed_tasks: Vec<i32>,
-    task_definitions: serde_json::Value,
-    flow_name: String,
-    status: FlowStatus,
-}
-
-#[derive(Getters, Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct FlowListRecord {
-    #[getset(get = "pub")]
-    id: i32,
-    #[getset(get = "pub")]
-    flow_name: String,
-    #[getset(get = "pub")]
-    status: FlowStatus,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskStatus {
-    Running,
-    Failed,
-    Finished,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -96,7 +59,7 @@ impl Scheduler {
     pub async fn create_flow(
         &self,
         flow_name: String,
-        plan: Vec<BTreeSet<usize>>,
+        plan: Plan,
         task_definitions: Vec<Task>,
     ) -> Result<i32, SchedulerError> {
         let task_definitions_json = match serde_json::to_value(task_definitions) {
@@ -343,7 +306,7 @@ impl Scheduler {
             FlowRecord,
             r#"
             SELECT 
-                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks, 
+                id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks, 
                 task_definitions, flow_name, status AS "status: FlowStatus"
             FROM flows
             WHERE status IN ('success', 'failed')
@@ -373,7 +336,7 @@ impl Scheduler {
             FlowRecord,
             r#"
             SELECT 
-                id, plan, current_stage, running_tasks, finished_tasks, failed_tasks,
+                id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks,
                 task_definitions, flow_name, status AS "status: FlowStatus"
             FROM flows
             WHERE id = $1
@@ -511,11 +474,11 @@ mod tests {
             create_fake_task("flow-0-task-3"),
         ];
 
-        let test_plan_0 = vec![
+        let test_plan_0 = Plan(vec![
             BTreeSet::from([0]),
             BTreeSet::from([1, 2]),
             BTreeSet::from([3]),
-        ];
+        ]);
 
         let test_tasks_1 = vec![
             create_fake_task("flow-1-task-0"),
@@ -523,11 +486,11 @@ mod tests {
             create_fake_task("flow-1-task-2"),
         ];
 
-        let test_plan_1 = vec![
+        let test_plan_1 = Plan(vec![
             BTreeSet::from([0]),
             BTreeSet::from([1]),
             BTreeSet::from([2]),
-        ];
+        ]);
 
         let scheduler = Scheduler::new(pool);
         let mut rx = scheduler.subscribe();
@@ -646,14 +609,14 @@ mod tests {
             create_fake_task("flow-0-task-1"),
         ];
 
-        let test_plan_0 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+        let test_plan_0 = Plan(vec![BTreeSet::from([0]), BTreeSet::from([1])]);
 
         let test_tasks_1 = vec![
             create_fake_task("flow-1-task-0"),
             create_fake_task("flow-1-task-1"),
         ];
 
-        let test_plan_1 = vec![BTreeSet::from([0]), BTreeSet::from([1])];
+        let test_plan_1 = Plan(vec![BTreeSet::from([0]), BTreeSet::from([1])]);
 
         let scheduler = Scheduler::new(pool);
 

@@ -1,4 +1,3 @@
-use crate::flow::scheduler::{FlowListRecord, FlowRecord};
 use getset::Getters;
 use thiserror::Error;
 use tokio_stream::StreamExt;
@@ -6,6 +5,8 @@ use url::Url;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
+
+use crate::flow::record::{FlowListRecord, FlowRecord};
 
 #[derive(Error, Debug)]
 pub enum ClientError {

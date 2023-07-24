@@ -66,4 +66,3 @@ Run the below commands to run an [example python flow](framework/test.py)
 -   [ ] Handle unknown pod statuses
 -   [ ] Publish to crates.io and PyPI
 -   [ ] `flowctl` submit command
--   [ ] `flowctl` print tree for `status` command

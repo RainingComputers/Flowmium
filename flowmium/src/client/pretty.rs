@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::flow::scheduler::{FlowRecord, FlowStatus};
+use crate::flow::{record::FlowRecord, record::FlowStatus};
 
 use super::requests::{BytesDownloaded, FlowList, Okay};
 
@@ -35,9 +35,7 @@ impl fmt::Display for FlowList {
             writeln!(
                 f,
                 "{: <8} {: <40} {: <8}",
-                rec.id(),
-                rec.flow_name(),
-                rec.status()
+                rec.id, rec.flow_name, rec.status
             )?
         }
 

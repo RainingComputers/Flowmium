@@ -1,4 +1,5 @@
 use super::model::Task;
+use serde::{Deserialize, Serialize};
 use std::collections::{btree_set::BTreeSet, BTreeMap};
 use thiserror::Error;
 
@@ -20,6 +21,9 @@ pub enum PlannerError {
 pub struct Node {
     pub children: BTreeSet<usize>,
 }
+
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct Plan(pub Vec<BTreeSet<usize>>);
 
 fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
     let mut task_id_map: BTreeMap<&String, usize> = BTreeMap::new();
@@ -200,7 +204,7 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
     return Ok(());
 }
 
-pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, PlannerError> {
+pub fn construct_plan(tasks: &Vec<Task>) -> Result<Plan, PlannerError> {
     let nodes = construct_nodes(tasks)?;
 
     if let Some(node_id) = is_cyclic(&nodes) {
@@ -209,13 +213,13 @@ pub fn construct_plan(tasks: &Vec<Task>) -> Result<Vec<BTreeSet<usize>>, Planner
 
     valid_input_outputs(tasks, &nodes)?;
 
-    let mut plan: Vec<BTreeSet<usize>> = vec![];
+    let mut stages: Vec<BTreeSet<usize>> = vec![];
 
     for (node_id, node) in nodes.iter().enumerate() {
-        add_node_to_plan(node_id, node, &mut plan, &nodes);
+        add_node_to_plan(node_id, node, &mut stages, &nodes);
     }
 
-    return Ok(plan);
+    Ok(Plan(stages))
 }
 
 #[cfg(test)]
@@ -353,12 +357,12 @@ mod tests {
 
         let plan = construct_plan(&test_tasks);
 
-        let expected_plan = Ok(vec![
+        let expected_plan = Ok(Plan(vec![
             BTreeSet::from([0]),
             BTreeSet::from([3]),
             BTreeSet::from([1, 4]),
             BTreeSet::from([2]),
-        ]);
+        ]));
 
         assert_eq!(plan, expected_plan);
     }

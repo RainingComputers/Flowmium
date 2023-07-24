@@ -20,7 +20,8 @@ use crate::{
     flow::{
         executor::{instantiate_flow, ExecutorConfig, ExecutorError},
         model::Flow,
-        scheduler::{FlowListRecord, FlowRecord, Scheduler, SchedulerError, SchedulerEvent},
+        record::{FlowListRecord, FlowRecord},
+        scheduler::{Scheduler, SchedulerError, SchedulerEvent},
     },
     secrets::{SecretsCrud, SecretsCrudError},
 };
