@@ -62,7 +62,6 @@ Run the below commands to run an [example python flow](framework/test.py)
 ## TODO
 
 -   [ ] Workers
--   [ ] Restrict flow names to 32 characters
 -   [ ] Handle unknown pod statuses
 -   [ ] Publish to crates.io and PyPI
 -   [ ] `flowctl` submit command

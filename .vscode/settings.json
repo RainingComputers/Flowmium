@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
         "actix",
+        "argh",
         "creds",
+        "flowctl",
         "Flowmium",
         "sched",
         "serde",

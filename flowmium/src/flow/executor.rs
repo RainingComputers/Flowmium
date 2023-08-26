@@ -48,6 +48,8 @@ pub enum ExecutorError {
         #[source]
         SecretsCrudError,
     ),
+    #[error("flow name longer than 32 characters: {0}")]
+    FlowNameTooLongError(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -339,6 +341,10 @@ async fn get_task_status(
 
 #[tracing::instrument(skip(sched, flow))]
 pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, ExecutorError> {
+    if flow.name.len() > 32 {
+        return Err(ExecutorError::FlowNameTooLongError(flow.name.clone()));
+    }
+
     let plan = construct_plan(&flow.tasks)?;
 
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");

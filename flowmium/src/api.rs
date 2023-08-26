@@ -29,7 +29,9 @@ use crate::{
 impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            ExecutorError::UnableToConstructPlan(_) => StatusCode::BAD_REQUEST,
+            ExecutorError::UnableToConstructPlan(_) | ExecutorError::FlowNameTooLongError(_) => {
+                StatusCode::BAD_REQUEST
+            }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
