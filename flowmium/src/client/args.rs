@@ -15,7 +15,7 @@ pub struct FlowCtlOptions {
 #[argh(subcommand)]
 pub enum Command {
     List(LsOpts),
-    Status(StatusOpts),
+    Describe(DescribeOpts),
     Download(DownloadOpts),
     Secret(SecretOpts),
     Subscribe(SubscribeOpts),
@@ -27,9 +27,9 @@ pub enum Command {
 pub struct LsOpts {}
 
 #[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "status")]
-/// get status of a workflow
-pub struct StatusOpts {
+#[argh(subcommand, name = "describe")]
+/// describe workflow properties and status in json
+pub struct DescribeOpts {
     #[argh(positional)]
     /// id of the workflow
     pub id: String,

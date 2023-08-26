@@ -7,6 +7,7 @@
         "serde",
         "sqlx",
         "thiserror",
-        "tolerations"
+        "tolerations",
+        "tungstenite"
     ]
 }

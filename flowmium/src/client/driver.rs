@@ -22,8 +22,8 @@ pub async fn run() -> ExitCode {
 
     let formatted_req_resp = match args.command {
         args::Command::List(_) => make_request(|| requests::list_workflows(&args.url)).await,
-        args::Command::Status(status_opts) => {
-            make_request(|| requests::get_status(&args.url, &status_opts.id)).await
+        args::Command::Describe(describe_opts) => {
+            make_request(|| requests::get_status(&args.url, &describe_opts.id)).await
         }
         args::Command::Secret(secret_opts) => match secret_opts.command {
             args::SecretCommand::Create(create_opts) => {

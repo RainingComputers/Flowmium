@@ -26,14 +26,14 @@ pub enum TaskStatus {
 
 pub struct FlowRecord {
     pub id: i32,
+    pub flow_name: String,
+    pub status: FlowStatus,
     pub plan: Plan,
     pub current_stage: i32,
     pub running_tasks: Vec<i32>,
     pub finished_tasks: Vec<i32>,
     pub failed_tasks: Vec<i32>,
     pub task_definitions: serde_json::Value,
-    pub flow_name: String,
-    pub status: FlowStatus,
 }
 
 impl<'r, DB: Database> sqlx::Decode<'r, DB> for Plan
@@ -56,4 +56,8 @@ pub struct FlowListRecord {
     pub id: i32,
     pub flow_name: String,
     pub status: FlowStatus,
+    pub num_running: Option<i32>,
+    pub num_finished: Option<i32>,
+    pub num_failed: Option<i32>,
+    pub num_total: Option<i32>,
 }

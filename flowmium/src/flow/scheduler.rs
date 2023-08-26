@@ -277,7 +277,11 @@ impl Scheduler {
             FlowListRecord,
             r#"
             SELECT 
-                id, flow_name, status AS "status: FlowStatus"
+                id, flow_name, status AS "status: FlowStatus", 
+                array_length(running_tasks, 1) AS num_running, 
+                array_length(finished_tasks, 1) AS num_finished, 
+                array_length(failed_tasks, 1) AS num_failed,
+                json_array_length(task_definitions) AS num_total
             FROM flows
             ORDER BY id ASC
             LIMIT 1000;
