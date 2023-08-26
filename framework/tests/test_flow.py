@@ -1,4 +1,5 @@
 from flowmium import Flow, FlowContext
+from flowmium.serializers import json_text, plain_text
 import os
 
 
@@ -10,12 +11,12 @@ def foo() -> str:
     return os.environ["GREETINGS"]
 
 
-@flow.task({"input_str": foo})
+@flow.task({"input_str": foo}, serializer=plain_text)
 def replace_letter_a(input_str: str, flowctx: FlowContext) -> str:
     return input_str.replace("a", "e") + str(flowctx.task_id)
 
 
-@flow.task({"input_str": foo})
+@flow.task({"input_str": foo}, serializer=json_text)
 def replace_letter_t(input_str: str) -> str:
     return input_str.replace("t", "d")
 
@@ -39,7 +40,7 @@ def test_dag_yaml() -> None:
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
                 "inputs": [],
-                "outputs": [{"name": "foo-output", "path": "task-output-foo.pkl"}],
+                "outputs": [{"name": "foo-output.pkl", "path": "task-output-foo.pkl"}],
             },
             {
                 "name": "replace-letter-a",
@@ -50,11 +51,13 @@ def test_dag_yaml() -> None:
                     {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "1"},
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
-                "inputs": [{"from": "foo-output", "path": "task-inputs-input_str.pkl"}],
+                "inputs": [
+                    {"from": "foo-output.pkl", "path": "task-inputs-input_str.pkl"}
+                ],
                 "outputs": [
                     {
-                        "name": "replace-letter-a-output",
-                        "path": "task-output-replace-letter-a.pkl",
+                        "name": "replace-letter-a-output.txt",
+                        "path": "task-output-replace-letter-a.txt",
                     }
                 ],
             },
@@ -67,11 +70,13 @@ def test_dag_yaml() -> None:
                     {"name": "FLOWMIUM_FRAMEWORK_TASK_ID", "value": "2"},
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
-                "inputs": [{"from": "foo-output", "path": "task-inputs-input_str.pkl"}],
+                "inputs": [
+                    {"from": "foo-output.pkl", "path": "task-inputs-input_str.pkl"}
+                ],
                 "outputs": [
                     {
-                        "name": "replace-letter-t-output",
-                        "path": "task-output-replace-letter-t.pkl",
+                        "name": "replace-letter-t-output.json",
+                        "path": "task-output-replace-letter-t.json",
                     }
                 ],
             },
@@ -86,16 +91,16 @@ def test_dag_yaml() -> None:
                 ],
                 "inputs": [
                     {
-                        "from": "replace-letter-t-output",
-                        "path": "task-inputs-first.pkl",
+                        "from": "replace-letter-t-output.json",
+                        "path": "task-inputs-first.json",
                     },
                     {
-                        "from": "replace-letter-a-output",
-                        "path": "task-inputs-second.pkl",
+                        "from": "replace-letter-a-output.txt",
+                        "path": "task-inputs-second.txt",
                     },
                 ],
                 "outputs": [
-                    {"name": "concat-output", "path": "task-output-concat.pkl"}
+                    {"name": "concat-output.pkl", "path": "task-output-concat.pkl"}
                 ],
             },
         ],

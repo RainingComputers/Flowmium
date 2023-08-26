@@ -53,18 +53,19 @@ pub async fn get_artefact(
 ) -> Result<ResponseData, ArtefactError> {
     let response = match bucket.get_object(&store_path).await {
         Ok(response) => response,
-        Err(error) => {
-            tracing::error!(%error, "Could not download artefact");
-            return Err(ArtefactError::UnableToDownloadInput(error));
-        }
+        Err(error) => match error {
+            s3::error::S3Error::Http(404, _) => {
+                tracing::error!("Got 404 response while downloading artefact");
+                return Err(ArtefactError::ArtefactDoesNotExist(store_path));
+            }
+            error => {
+                tracing::error!(%error, "Could not download artefact");
+                return Err(ArtefactError::UnableToDownloadInput(error));
+            }
+        },
     };
 
     let status_code = response.status_code();
-
-    if status_code == 404 {
-        tracing::error!("Got 404 response while downloading artefact");
-        return Err(ArtefactError::ArtefactDoesNotExist(store_path));
-    }
 
     if status_code != 200 {
         tracing::error!(

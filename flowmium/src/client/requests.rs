@@ -23,8 +23,8 @@ pub enum ClientError {
         #[from]
         reqwest::Error,
     ),
-    #[error("response not ok error: {0}")]
-    ResponseNotOk(String),
+    #[error("response {0} error: {1}")]
+    ResponseNotOk(u16, String),
     #[error("io error: {0}")]
     IoError(
         #[source]
@@ -97,11 +97,21 @@ pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> 
     Ok(reqwest::get(abs_url).await?.json::<FlowRecord>().await?)
 }
 
-pub async fn response_to_result(response: reqwest::Response) -> Result<Okay, ClientError> {
-    if response.status() != 200 {
-        return Err(ClientError::ResponseNotOk(response.text().await?));
+pub async fn check_status(response: reqwest::Response) -> Result<reqwest::Response, ClientError> {
+    let response_status = response.status();
+
+    if response_status != 200 {
+        return Err(ClientError::ResponseNotOk(
+            response_status.as_u16(),
+            response.text().await?,
+        ));
     }
 
+    Ok(response)
+}
+
+pub async fn check_status_take(response: reqwest::Response) -> Result<Okay, ClientError> {
+    check_status(response).await?;
     Ok(Okay())
 }
 
@@ -110,7 +120,7 @@ pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<Okay, Cl
 
     let client = reqwest::Client::new();
 
-    response_to_result(client.post(abs_url).json::<str>(value).send().await?).await
+    check_status_take(client.post(abs_url).json::<str>(value).send().await?).await
 }
 
 pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<Okay, ClientError> {
@@ -118,7 +128,7 @@ pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<Okay, Cl
 
     let client = reqwest::Client::new();
 
-    response_to_result(client.put(abs_url).json::<str>(value).send().await?).await
+    check_status_take(client.put(abs_url).json::<str>(value).send().await?).await
 }
 
 pub async fn delete_secret(url: &str, key: &str) -> Result<Okay, ClientError> {
@@ -126,7 +136,7 @@ pub async fn delete_secret(url: &str, key: &str) -> Result<Okay, ClientError> {
 
     let client = reqwest::Client::new();
 
-    response_to_result(client.delete(abs_url).send().await?).await
+    check_status_take(client.delete(abs_url).send().await?).await
 }
 
 fn get_path_from_response_url(
@@ -153,6 +163,8 @@ pub async fn download_artefact(
     let abs_url = get_abs_url(url, &format!("/api/v1/artefact/{}/{}", id, name))?;
 
     let response = reqwest::get(abs_url).await?;
+
+    let response = check_status(response).await?;
 
     let file_path = get_path_from_response_url(&response, dest, &format!("flow-{}-output", id));
 
@@ -201,5 +213,5 @@ pub async fn submit(url: &str, flow: &Flow) -> Result<Okay, ClientError> {
 
     let client = reqwest::Client::new();
 
-    response_to_result(client.post(abs_url).json(flow).send().await?).await
+    check_status_take(client.post(abs_url).json(flow).send().await?).await
 }

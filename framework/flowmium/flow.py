@@ -47,7 +47,7 @@ class ArgDoesNotExist(Exception):
 class Flow:
     INPUT_PATH_TEMPLATE = "task-inputs-{}.{}"
     OUTPUT_PATH_TEMPLATE = "task-output-{}.{}"
-    OUTPUT_NAME_TEMPLATE = "{}-output"
+    OUTPUT_NAME_TEMPLATE = "{}-output.{}"
 
     def __init__(self, name: str) -> None:
         self.tasks: list[Task] = []
@@ -62,7 +62,6 @@ class Flow:
         self,
         arg_names_list: list[str],
         input_dict_tuple: tuple[str, Callable],
-        file_ext: str,
     ) -> Input:
         arg_name, inp_task_func = input_dict_tuple
 
@@ -71,11 +70,13 @@ class Flow:
 
         input_task_name = Flow._get_task_name(inp_task_func)
 
+        input_file_ext = self.serializers[input_task_name].ext
+
         return Input(
             depends=input_task_name,
             arg_name=arg_name,
-            frm=Flow.OUTPUT_NAME_TEMPLATE.format(input_task_name),
-            path=Flow.INPUT_PATH_TEMPLATE.format(arg_name, file_ext),
+            frm=Flow.OUTPUT_NAME_TEMPLATE.format(input_task_name, input_file_ext),
+            path=Flow.INPUT_PATH_TEMPLATE.format(arg_name, input_file_ext),
             load=self.serializers[input_task_name].load,
         )
 
@@ -98,7 +99,7 @@ class Flow:
             self.serializers[task_name] = serializer
 
             task_output = Output(
-                name=Flow.OUTPUT_NAME_TEMPLATE.format(task_name),
+                name=Flow.OUTPUT_NAME_TEMPLATE.format(task_name, serializer.ext),
                 path=Flow.OUTPUT_PATH_TEMPLATE.format(task_name, serializer.ext),
                 dump=serializer.dump,
             )
@@ -108,7 +109,7 @@ class Flow:
             )
 
             task_inputs = [
-                self._parse_inputs_dict_tuple(arg_names_list, item, serializer.ext)
+                self._parse_inputs_dict_tuple(arg_names_list, item)
                 for item in inputs.items()
             ]
 
