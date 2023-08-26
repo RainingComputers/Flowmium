@@ -1,0 +1,26 @@
+name: Code formatting, semantic checking and tests
+
+on: push
+
+jobs:
+  rust-check:
+    name: Code formatting, type and semantic checking
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Run cargo check
+        run: cargo check
+        working-directory: flowmium
+      - name: Run clippy
+        run: cargo clippy
+      - name: Start test services
+        run: make up
+      - name: Install sqlx CLI
+        run: cargo install sqlx-cli
+      - name: Run migrations on test database
+        run: sqlx migrate run

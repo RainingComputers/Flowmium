@@ -5,6 +5,7 @@
         "artefacts",
         "backoff",
         "bytestring",
+        "clippy",
         "creds",
         "dependee",
         "flowctl",
@@ -13,12 +14,15 @@
         "minio",
         "openapi",
         "peekable",
+        "proto",
         "reqwest",
+        "rustfmt",
         "sched",
         "serde",
         "sqlx",
         "thiserror",
         "timedout",
+        "tlsv",
         "tungstenite"
     ]
 }
