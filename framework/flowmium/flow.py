@@ -1,5 +1,6 @@
 import os
 import inspect
+import json
 from urllib.parse import urljoin
 import argparse
 from typing import Callable, Any
@@ -195,12 +196,21 @@ class Flow:
         parser.add_argument("--cmd", required=True, type=str, nargs="+")
         parser.add_argument("--image", required=True, type=str)
         parser.add_argument("--flowmium-server", required=True, type=str)
+        parser.add_argument(
+            "--dry-run", required=False, default=False, action="store_true"
+        )
 
         args = parser.parse_args()
 
+        dag = self.get_dag_dict(args.image, args.cmd, secrets_refs)
+
+        if args.dry_run:
+            print(json.dumps(dag, indent=4))
+            return
+
         resp = requests.post(
             urljoin(args.flowmium_server, "/api/v1/job"),
-            json=self.get_dag_dict(args.image, args.cmd, secrets_refs),
+            json=dag,
         )
 
         if resp.status_code != 200:
