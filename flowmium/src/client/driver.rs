@@ -5,6 +5,7 @@ use crate::client::args;
 use crate::client::requests;
 
 use crate::client::requests::ClientError;
+use crate::flow::model::Flow;
 
 pub async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
 where
@@ -15,6 +16,30 @@ where
         Ok(resp) => Ok(format!("{}", resp)),
         Err(error) => Err(error),
     }
+}
+
+async fn get_flow_from_file(file_path: String) -> Result<Flow, ExitCode> {
+    let contents = tokio::fs::read_to_string(file_path).await;
+
+    let contents = match contents {
+        Ok(contents) => contents,
+        Err(err) => {
+            eprintln!("unable to open file: {}", err);
+            return Err(ExitCode::FAILURE);
+        }
+    };
+
+    let flow = serde_yaml::from_str(&contents);
+
+    let flow = match flow {
+        Ok(flow) => flow,
+        Err(err) => {
+            eprint!("invalid definition: {}", err);
+            return Err(ExitCode::FAILURE);
+        }
+    };
+
+    Ok(flow)
 }
 
 pub async fn run() -> ExitCode {
@@ -58,6 +83,14 @@ pub async fn run() -> ExitCode {
                 requests::subscribe(&args.url, subscribe_opts.secure, |msg| println!("{}", msg))
             })
             .await
+        }
+        args::Command::Submit(submit_opts) => {
+            let flow = match get_flow_from_file(submit_opts.file_path).await {
+                Err(exit_code) => return exit_code,
+                Ok(flow) => flow,
+            };
+
+            make_request(|| requests::submit(&args.url, &flow)).await
         }
     };
 

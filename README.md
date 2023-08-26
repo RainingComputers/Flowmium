@@ -50,7 +50,6 @@ Run the below commands to run an [example python flow](framework/test.py)
     docker build . -t py-flow-test
     docker tag py-flow-test localhost:5000/py-flow-test:latest
     docker push localhost:5000/py-flow-test:latest
-    python3 test.py --image registry:5000/py-flow-test:latest --cmd python3 test.py --flowmium-server http://localhost:8080
     ```
 
 -   Submit the flow to the executor server
@@ -64,4 +63,3 @@ Run the below commands to run an [example python flow](framework/test.py)
 -   [ ] Workers
 -   [ ] Handle unknown pod statuses
 -   [ ] Publish to crates.io and PyPI
--   [ ] `flowctl` submit command

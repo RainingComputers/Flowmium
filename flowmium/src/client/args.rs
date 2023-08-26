@@ -19,6 +19,7 @@ pub enum Command {
     Download(DownloadOpts),
     Secret(SecretOpts),
     Subscribe(SubscribeOpts),
+    Submit(SubmitOpts),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -108,4 +109,13 @@ pub struct SubscribeOpts {
     #[argh(switch)]
     /// use wss:// scheme instead of ws:// scheme
     pub secure: bool,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "submit")]
+/// submit workflow yaml definition file
+pub struct SubmitOpts {
+    #[argh(positional)]
+    /// path to the yaml definition file
+    pub file_path: String,
 }

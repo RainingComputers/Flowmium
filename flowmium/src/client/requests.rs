@@ -6,6 +6,7 @@ use url::Url;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use crate::flow::model::Flow;
 use crate::flow::record::{FlowListRecord, FlowRecord};
 
 #[derive(Error, Debug)]
@@ -193,4 +194,12 @@ where
     }
 
     Ok(Okay())
+}
+
+pub async fn submit(url: &str, flow: &Flow) -> Result<Okay, ClientError> {
+    let abs_url = get_abs_url(url, "/api/v1/job")?;
+
+    let client = reqwest::Client::new();
+
+    response_to_result(client.post(abs_url).json(flow).send().await?).await
 }

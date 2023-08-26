@@ -175,26 +175,33 @@ class Flow:
         }
 
     def run(self, secrets_refs: dict[str, str] = {}) -> None:
-        try:
+        task_id = os.getenv("FLOWMIUM_FRAMEWORK_TASK_ID", default=None)
+
+        if task_id is not None:
             flowctx = FlowContext(
                 task_id=int(os.environ["FLOWMIUM_FRAMEWORK_TASK_ID"]),
             )
 
             self.run_task(flowctx)
-        except KeyError:
-            import requests
+        else:
+            self.submit_flow(secrets_refs)
 
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--cmd", required=True, type=str, nargs="+")
-            parser.add_argument("--image", required=True, type=str)
-            parser.add_argument("--flowmium-server", required=True, type=str)
+    def submit_flow(self, secrets_refs: dict[str, str] = {}) -> None:
+        import requests
 
-            args = parser.parse_args()
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--cmd", required=True, type=str, nargs="+")
+        parser.add_argument("--image", required=True, type=str)
+        parser.add_argument("--flowmium-server", required=True, type=str)
 
-            resp = requests.post(
-                urljoin(args.flowmium_server, "/api/v1/job"),
-                json=self.get_dag_dict(args.image, args.cmd, secrets_refs),
-            )
+        args = parser.parse_args()
 
+        resp = requests.post(
+            urljoin(args.flowmium_server, "/api/v1/job"),
+            json=self.get_dag_dict(args.image, args.cmd, secrets_refs),
+        )
+
+        if resp.status_code != 200:
             print(resp.status_code)
             print(resp.text)
+            exit(1)
