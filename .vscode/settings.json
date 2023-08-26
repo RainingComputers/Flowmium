@@ -2,13 +2,16 @@
     "cSpell.words": [
         "actix",
         "argh",
+        "clippy",
         "creds",
         "flowctl",
         "Flowmium",
+        "proto",
         "sched",
         "serde",
         "sqlx",
         "thiserror",
+        "tlsv",
         "tolerations",
         "tungstenite"
     ]
