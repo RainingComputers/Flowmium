@@ -10,7 +10,7 @@ use super::bucket::{download_input, get_bucket, upload_output};
 use super::errors::ArtefactError;
 
 pub fn get_store_path(flow_id: usize, output_name: &str) -> String {
-    return flow_id.to_string() + "/" + output_name;
+    flow_id.to_string() + "/" + output_name
 }
 
 async fn download_all_inputs(
@@ -20,10 +20,10 @@ async fn download_all_inputs(
 ) -> Result<(), ArtefactError> {
     for input in inputs {
         let store_path = get_store_path(flow_id, &input.from);
-        download_input(&bucket, input.path, store_path).await?;
+        download_input(bucket, input.path, store_path).await?;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 async fn upload_all_outputs(
@@ -33,10 +33,10 @@ async fn upload_all_outputs(
 ) -> Result<(), ArtefactError> {
     for output in outputs {
         let store_path = get_store_path(flow_id, &output.name);
-        upload_output(&bucket, output.path, store_path).await?;
+        upload_output(bucket, output.path, store_path).await?;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 #[derive(Deserialize, Debug)]
@@ -51,7 +51,7 @@ pub struct SidecarConfig {
 }
 
 fn get_command(cmd: Vec<String>) -> Option<Command> {
-    if cmd.len() == 0 {
+    if cmd.is_empty() {
         tracing::error!("Invalid command");
         return None;
     }
@@ -64,7 +64,7 @@ fn get_command(cmd: Vec<String>) -> Option<Command> {
 
     command.stdout(Stdio::inherit());
 
-    return Some(command);
+    Some(command)
 }
 
 #[tracing::instrument(skip(config))]
@@ -90,7 +90,7 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     };
 
     if let Some(inputs) = option_inputs {
-        if let Err(_) = download_all_inputs(&bucket, config.flow_id, inputs).await {
+        if (download_all_inputs(&bucket, config.flow_id, inputs).await).is_err() {
             return ExitCode::FAILURE;
         }
     }
@@ -113,13 +113,13 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
         tracing::error!("Task existed with status {}", task_output.status);
 
         if let Ok(stdout_utf8) = String::from_utf8(task_output.stdout) {
-            if stdout_utf8.len() != 0 {
+            if !stdout_utf8.is_empty() {
                 tracing::error!("Task exited with stdout {}", stdout_utf8);
             }
         }
 
         if let Ok(stderr_utf8) = String::from_utf8(task_output.stderr) {
-            if stderr_utf8.len() != 0 {
+            if !stderr_utf8.is_empty() {
                 tracing::error!("Task exited with stderr {}", stderr_utf8);
             }
         }
@@ -128,10 +128,10 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     }
 
     if let Some(outputs) = option_outputs {
-        if let Err(_) = upload_all_outputs(&bucket, config.flow_id, outputs).await {
+        if (upload_all_outputs(&bucket, config.flow_id, outputs).await).is_err() {
             return ExitCode::FAILURE;
         }
     }
 
-    return ExitCode::SUCCESS;
+    ExitCode::SUCCESS
 }

@@ -18,7 +18,7 @@ pub enum ClientError {
         url::ParseError,
     ),
     #[error("request error: {0}")]
-    RequestError(
+    Request(
         #[source]
         #[from]
         reqwest::Error,
@@ -26,19 +26,19 @@ pub enum ClientError {
     #[error("response {0} error: {1}")]
     ResponseNotOk(u16, String),
     #[error("io error: {0}")]
-    IoError(
+    Io(
         #[source]
         #[from]
         std::io::Error,
     ),
     #[error("websocket error: {0}")]
-    WebsocketError(
+    Websocket(
         #[source]
         #[from]
         tokio_tungstenite::tungstenite::Error,
     ),
     #[error("url scheme conversion error")]
-    UrlSchemeConversionErr,
+    UrlSchemeConversion,
 }
 
 #[derive(Getters, Debug)]
@@ -149,7 +149,7 @@ fn get_path_from_response_url(
         .path_segments()
         .and_then(|segments| segments.last())
         .and_then(|name| if name.is_empty() { None } else { Some(name) })
-        .unwrap_or(&default_name);
+        .unwrap_or(default_name);
 
     Path::new(dir_path).join(file_name)
 }
@@ -182,7 +182,7 @@ fn get_ws_scheme(secure: bool) -> &'static str {
         return "wss";
     }
 
-    return "ws";
+    "ws"
 }
 
 pub async fn subscribe<F>(url: &str, secure: bool, on_message: F) -> Result<Okay, ClientError>
@@ -191,8 +191,8 @@ where
 {
     let mut abs_url = get_abs_url(url, "/api/v1/scheduler/ws")?;
 
-    if let Err(_) = abs_url.set_scheme(get_ws_scheme(secure)) {
-        return Err(ClientError::UrlSchemeConversionErr);
+    if abs_url.set_scheme(get_ws_scheme(secure)).is_err() {
+        return Err(ClientError::UrlSchemeConversion);
     };
 
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;

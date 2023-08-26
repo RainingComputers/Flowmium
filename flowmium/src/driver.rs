@@ -31,7 +31,7 @@ async fn get_pool() -> Option<Pool<Postgres>> {
         return None;
     };
 
-    return Some(pool);
+    Some(pool)
 }
 
 async fn get_executor_config() -> Option<ExecutorConfig> {
@@ -45,7 +45,7 @@ async fn get_executor_config() -> Option<ExecutorConfig> {
 
     let executor_config = ExecutorConfig::create_default_config(config);
 
-    return Some(executor_config);
+    Some(executor_config)
 }
 
 fn get_bucket_from_executor_config(
@@ -53,12 +53,12 @@ fn get_bucket_from_executor_config(
 ) -> Result<Bucket, ArtefactError> {
     let pod_config = &executor_config.pod_config;
 
-    return get_bucket(
+    get_bucket(
         &pod_config.access_key,
         &pod_config.secret_key,
         &pod_config.bucket_name,
         pod_config.store_url.clone(),
-    );
+    )
 }
 
 fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &ExecutorConfig) {
@@ -105,7 +105,7 @@ async fn run_server(server_opts: ServerOpts) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    return ExitCode::SUCCESS;
+    ExitCode::SUCCESS
 }
 
 #[tracing::instrument]
@@ -118,7 +118,7 @@ async fn task_main(task_opts: TaskOpts) -> ExitCode {
         }
     };
 
-    return run_task(config, task_opts.cmd).await;
+    run_task(config, task_opts.cmd).await
 }
 
 pub async fn run() -> ExitCode {

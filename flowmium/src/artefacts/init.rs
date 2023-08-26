@@ -7,5 +7,5 @@ pub async fn do_init(src: String, dest: String) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    return ExitCode::SUCCESS;
+    ExitCode::SUCCESS
 }

@@ -49,7 +49,7 @@ pub enum ExecutorError {
         SecretsCrudError,
     ),
     #[error("flow name longer than 32 characters: {0}")]
-    FlowNameTooLongError(String),
+    FlowNameTooLong(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,7 +94,7 @@ async fn get_kubernetes_client() -> Result<Client, ExecutorError> {
         Ok(client) => Ok(client),
         Err(error) => {
             tracing::error!(%error, "Unable to connect to kubernetes");
-            return Err(ExecutorError::UnableToConnectToKubernetes(error));
+            Err(ExecutorError::UnableToConnectToKubernetes(error))
         }
     }
 }
@@ -103,7 +103,7 @@ fn get_task_cmd(task: &Task) -> Vec<&str> {
     let mut task_cmd = vec!["/var/run/flowmium", "task"];
     task_cmd.extend(task.cmd.iter().map(|elem| &elem[..]));
 
-    return task_cmd;
+    task_cmd
 }
 
 async fn get_env_json(
@@ -164,7 +164,7 @@ async fn get_task_envs<'a>(
         task_envs.push(json_env);
     }
 
-    return Ok(task_envs);
+    Ok(task_envs)
 }
 
 #[tracing::instrument(skip(config, secrets))]
@@ -229,7 +229,7 @@ async fn spawn_task(
                     "containers": [{
                         "name": task.name,
                         "image": task.image,
-                        "command": get_task_cmd(&task),
+                        "command": get_task_cmd(task),
                         "env": get_task_envs(task, input_json, output_json, flow_id, config, secrets).await?,
                         "volumeMounts": [
                             {
@@ -289,14 +289,14 @@ async fn list_pods(
         }
     };
 
-    return Ok(pod_list);
+    Ok(pod_list)
 }
 
 fn get_pod_phase(pod: Pod) -> Option<String> {
     let pod_status = pod.status?;
     let phase = pod_status.phase?;
 
-    return Some(phase);
+    Some(phase)
 }
 
 fn phase_to_task_status(phase: String) -> TaskStatus {
@@ -336,13 +336,13 @@ async fn get_task_status(
     };
 
     let status = phase_to_task_status(phase);
-    return Ok(status);
+    Ok(status)
 }
 
 #[tracing::instrument(skip(sched, flow))]
 pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, ExecutorError> {
     if flow.name.len() > 32 {
-        return Err(ExecutorError::FlowNameTooLongError(flow.name.clone()));
+        return Err(ExecutorError::FlowNameTooLong(flow.name.clone()));
     }
 
     let plan = construct_plan(&flow.tasks)?;
@@ -350,7 +350,7 @@ pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, Exec
     tracing::info!(flow_name = flow.name, plan = ?plan, "Creating flow");
     let flow_id = sched.create_flow(flow.name, plan, flow.tasks).await?;
 
-    return Ok(flow_id);
+    Ok(flow_id)
 }
 
 #[tracing::instrument(skip(sched, config, secrets))]
@@ -364,7 +364,7 @@ async fn sched_pending_tasks(
 
     if let Some(tasks) = option_tasks {
         for (task_id, task) in tasks {
-            match spawn_task(flow_id, task_id, &task, &config, secrets).await {
+            match spawn_task(flow_id, task_id, &task, config, secrets).await {
                 Ok(_) => sched.mark_task_running(flow_id, task_id).await?,
                 Err(_) => {
                     // TODO: Add test for below, without below, jobs could get stale on restart
@@ -377,7 +377,7 @@ async fn sched_pending_tasks(
         return Ok(true);
     }
 
-    return Ok(false);
+    Ok(false)
 }
 
 #[tracing::instrument(skip(sched, config))]
@@ -392,11 +392,11 @@ async fn mark_running_tasks(
         Err(_) => return sched.mark_task_failed(flow_id, task_id).await,
     };
 
-    return match status {
+    match status {
         TaskStatus::Pending | TaskStatus::Running => Ok(()),
         TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id).await,
         TaskStatus::Failed | TaskStatus::Unknown => sched.mark_task_failed(flow_id, task_id).await,
-    };
+    }
 }
 
 #[tracing::instrument(skip(sched, config, secrets))]
@@ -407,14 +407,14 @@ pub async fn schedule_and_run_tasks(
 ) {
     if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows_ids().await {
         for (flow_id, running_tasks) in tasks_to_schedule {
-            match sched_pending_tasks(sched, flow_id, &config, secrets).await {
+            match sched_pending_tasks(sched, flow_id, config, secrets).await {
                 Ok(true) => continue,
                 Ok(false) => (),
                 Err(_) => break,
             }
 
             for task_id in running_tasks {
-                if let Err(_) = mark_running_tasks(sched, flow_id, task_id, &config).await {
+                if (mark_running_tasks(sched, flow_id, task_id, config).await).is_err() {
                     break;
                 };
             }
@@ -482,7 +482,7 @@ mod tests {
             bucket.delete_object(obj.key).await.unwrap();
         }
 
-        return bucket;
+        bucket
     }
 
     async fn delete_all_jobs() {

@@ -29,7 +29,7 @@ use crate::{
 impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            ExecutorError::UnableToConstructPlan(_) | ExecutorError::FlowNameTooLongError(_) => {
+            ExecutorError::UnableToConstructPlan(_) | ExecutorError::FlowNameTooLong(_) => {
                 StatusCode::BAD_REQUEST
             }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -50,7 +50,7 @@ async fn create_job(
 impl ResponseError for SchedulerError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            SchedulerError::FlowDoesNotExistError(_) => StatusCode::BAD_REQUEST,
+            SchedulerError::FlowDoesNotExist(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -60,7 +60,7 @@ impl ResponseError for SchedulerError {
 async fn list_jobs(
     sched: web::Data<Scheduler>,
 ) -> Result<web::Json<Vec<FlowListRecord>>, SchedulerError> {
-    return sched.list_flows().await.map(web::Json);
+    sched.list_flows().await.map(web::Json)
 }
 
 #[get("/job/{id}")]
@@ -99,7 +99,7 @@ async fn download_artefact(
 impl ResponseError for SecretsCrudError {
     fn status_code(&self) -> StatusCode {
         match *self {
-            SecretsCrudError::DatabaseQueryError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            SecretsCrudError::DatabaseQuery(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::BAD_REQUEST,
         }
     }
@@ -144,7 +144,7 @@ async fn update_secret(
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type", content = "detail")]
 enum SchedulerRecvError {
-    LagError(u64),
+    Lag(u64),
     InternalServerError,
 }
 
@@ -165,7 +165,7 @@ impl Actor for SchedulerWebsocket {
                 Ok(event) => serde_json::to_string(&event),
                 Err(error) => match error {
                     BroadcastStreamRecvError::Lagged(count) => {
-                        serde_json::to_string(&SchedulerRecvError::LagError(count))
+                        serde_json::to_string(&SchedulerRecvError::Lag(count))
                     }
                 },
             };
@@ -203,16 +203,14 @@ async fn listen_to_scheduler(
     stream: web::Payload,
     sched: web::Data<Scheduler>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let resp = ws::start(
+    ws::start(
         SchedulerWebsocket {
             rx: Some(sched.subscribe()),
             spawn_handle: None,
         },
         &req,
         stream,
-    );
-
-    resp
+    )
 }
 
 pub async fn start_server(

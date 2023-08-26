@@ -16,13 +16,13 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum SchedulerError {
     #[error("invalid stored value error for flow: {0}")]
-    InvalidStoredValueError(i32),
+    InvalidStoredValue(i32),
     #[error("database query error: {0}")]
-    DatabaseQueryError(#[source] sqlx::error::Error),
+    DatabaseQuery(#[source] sqlx::error::Error),
     #[error("flow {0} does not exist error")]
-    FlowDoesNotExistError(i32),
+    FlowDoesNotExist(i32),
     #[error("unable to serialize/deserialize JSON: {0}")]
-    SerializeDeserializeError(#[source] serde_json::Error),
+    SerializeDeserialize(#[source] serde_json::Error),
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -48,7 +48,7 @@ impl Scheduler {
     pub fn new(pool: Pool<Postgres>) -> Self {
         let (tx, _rx) = broadcast::channel(1024);
 
-        return Self { pool, tx };
+        Self { pool, tx }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<SchedulerEvent> {
@@ -66,7 +66,7 @@ impl Scheduler {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize task definition to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserializeError(error));
+                return Err(SchedulerError::SerializeDeserialize(error));
             }
         };
 
@@ -74,7 +74,7 @@ impl Scheduler {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!(%error, "Unable to serialize plan to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserializeError(error));
+                return Err(SchedulerError::SerializeDeserialize(error));
             }
         };
 
@@ -111,7 +111,7 @@ impl Scheduler {
             Ok(id) => id,
             Err(error) => {
                 tracing::error!(%error, "Unable to create flow in database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
@@ -119,7 +119,7 @@ impl Scheduler {
             .tx
             .send(SchedulerEvent::FlowCreatedEvent { flow_id: id });
 
-        return Ok(id);
+        Ok(id)
     }
 
     #[tracing::instrument(skip(self))]
@@ -145,11 +145,11 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExist(flow_id))?;
 
         let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
@@ -189,11 +189,11 @@ impl Scheduler {
             },
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExist(flow_id))?;
 
         let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
@@ -223,11 +223,11 @@ impl Scheduler {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExistError(flow_id))?;
+        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExist(flow_id))?;
 
         let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
@@ -264,11 +264,11 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch running or pending flows from database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        return Ok(flows);
+        Ok(flows)
     }
 
     #[tracing::instrument(skip(self))]
@@ -293,11 +293,11 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch running or pending flows from database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        return Ok(flows);
+        Ok(flows)
     }
 
     #[tracing::instrument(skip(self))]
@@ -327,11 +327,11 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch terminated flows from database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
-        return Ok(flows);
+        Ok(flows)
     }
 
     #[tracing::instrument(skip(self))]
@@ -353,12 +353,12 @@ impl Scheduler {
             Ok(flows) => flows,
             Err(error) => {
                 tracing::error!(%error, "Unable to fetch terminated flows from database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
         match flow_optional {
-            None => Err(SchedulerError::FlowDoesNotExistError(id)),
+            None => Err(SchedulerError::FlowDoesNotExist(id)),
             Some(flow) => Ok(flow),
         }
     }
@@ -382,7 +382,7 @@ impl Scheduler {
             .filter(|(i, _)| task_ids.contains(i))
             .collect();
 
-        return Some(task_defs_filtered);
+        Some(task_defs_filtered)
     }
 
     #[tracing::instrument(skip(self))]
@@ -414,7 +414,7 @@ impl Scheduler {
             Ok(tasks) => tasks,
             Err(error)  => {
                 tracing::error!(%error, "Unable to fetch next stage from database");
-                return Err(SchedulerError::DatabaseQueryError(error));
+                return Err(SchedulerError::DatabaseQuery(error));
             }
         };
 
@@ -424,10 +424,10 @@ impl Scheduler {
 
         let Some(stage_tasks) = stage_tasks_optional else {
             tracing::error!("Invalid record in database for flow {}", flow_id);
-            return Err(SchedulerError::InvalidStoredValueError(flow_id));
+            return Err(SchedulerError::InvalidStoredValue(flow_id));
         };
 
-        return Ok(Some(stage_tasks));
+        Ok(Some(stage_tasks))
     }
 }
 
@@ -637,7 +637,7 @@ mod tests {
 
         fn assert_flow_does_not_exist_error(result: Result<(), SchedulerError>, flow_id: i32) {
             assert!(match result {
-                Err(SchedulerError::FlowDoesNotExistError(id)) => id == flow_id,
+                Err(SchedulerError::FlowDoesNotExist(id)) => id == flow_id,
                 _ => false,
             })
         }

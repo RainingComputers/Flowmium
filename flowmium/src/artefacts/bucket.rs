@@ -3,28 +3,28 @@ use s3::{creds::Credentials, request_trait::ResponseData, Bucket, Region};
 use super::errors::ArtefactError;
 
 pub fn get_bucket(
-    access_key: &String,
-    secret_key: &String,
-    bucket_name: &String,
+    access_key: &str,
+    secret_key: &str,
+    bucket_name: &str,
     store_url: String,
 ) -> Result<Bucket, ArtefactError> {
-    let bucket_creds =
-        match Credentials::new(Some(&access_key), Some(&secret_key), None, None, None) {
-            Ok(creds) => creds,
-            Err(error) => {
-                tracing::error!(%error, "Unable to create creds for bucket");
-                return Err(ArtefactError::UnableToOpenBucket(
-                    s3::error::S3Error::Credentials(error),
-                ));
-            }
-        };
+    let bucket_creds = match Credentials::new(Some(access_key), Some(secret_key), None, None, None)
+    {
+        Ok(creds) => creds,
+        Err(error) => {
+            tracing::error!(%error, "Unable to create creds for bucket");
+            return Err(ArtefactError::UnableToOpenBucket(
+                s3::error::S3Error::Credentials(error),
+            ));
+        }
+    };
 
     let bucket_region = Region::Custom {
         region: "custom".to_owned(),
         endpoint: store_url,
     };
 
-    let bucket = match Bucket::new(&bucket_name, bucket_region, bucket_creds) {
+    let bucket = match Bucket::new(bucket_name, bucket_region, bucket_creds) {
         Ok(bucket) => bucket.with_path_style(),
         Err(error) => {
             tracing::error!(%error, "Unable to open bucket");
@@ -32,7 +32,7 @@ pub fn get_bucket(
         }
     };
 
-    return Ok(bucket);
+    Ok(bucket)
 }
 
 pub async fn create_parent_directories(local_path: &String) -> tokio::io::Result<()> {
@@ -75,7 +75,7 @@ pub async fn get_artefact(
         return Err(ArtefactError::UnableToDownloadInputApi(status_code));
     }
 
-    return Ok(response);
+    Ok(response)
 }
 
 #[tracing::instrument(skip(bucket))]
@@ -98,7 +98,7 @@ pub async fn download_input(
         return Err(ArtefactError::UnableToWriteInput(error));
     }
 
-    return Ok(());
+    Ok(())
 }
 
 #[tracing::instrument(skip(bucket))]
@@ -135,5 +135,5 @@ pub async fn upload_output(
         return Err(ArtefactError::UnableToUploadArtifactApi(status_cost));
     }
 
-    return Ok(());
+    Ok(())
 }

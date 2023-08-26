@@ -25,17 +25,17 @@ pub struct Node {
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Plan(pub Vec<BTreeSet<usize>>);
 
-fn construct_task_id_map(tasks: &Vec<Task>) -> BTreeMap<&String, usize> {
+fn construct_task_id_map(tasks: &[Task]) -> BTreeMap<&String, usize> {
     let mut task_id_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (index, task) in tasks.iter().enumerate() {
         task_id_map.insert(&task.name, index);
     }
 
-    return task_id_map;
+    task_id_map
 }
 
-fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
+fn construct_nodes(tasks: &[Task]) -> Result<Vec<Node>, PlannerError> {
     let task_id_map = construct_task_id_map(tasks);
 
     let mut nodes: Vec<Node> = vec![];
@@ -57,7 +57,7 @@ fn construct_nodes(tasks: &Vec<Task>) -> Result<Vec<Node>, PlannerError> {
         nodes.push(node);
     }
 
-    return Ok(nodes);
+    Ok(nodes)
 }
 
 fn is_cyclic_visit(
@@ -70,11 +70,11 @@ fn is_cyclic_visit(
     discovered.insert(node_id);
 
     for v in node.children.iter() {
-        if discovered.contains(&v) {
+        if discovered.contains(v) {
             return Some(*v);
         }
 
-        if !finished.contains(&v) {
+        if !finished.contains(v) {
             match is_cyclic_visit(nodes, *v, &nodes[*v], discovered, finished) {
                 None => {
                     continue;
@@ -89,7 +89,7 @@ fn is_cyclic_visit(
     discovered.remove(&node_id);
     finished.insert(node_id);
 
-    return None;
+    None
 }
 
 fn is_cyclic(nodes: &Vec<Node>) -> Option<usize> {
@@ -109,7 +109,7 @@ fn is_cyclic(nodes: &Vec<Node>) -> Option<usize> {
         }
     }
 
-    return None;
+    None
 }
 
 fn node_depends_on_node(dependent: &Node, dependee_id: usize, nodes: &Vec<Node>) -> bool {
@@ -125,7 +125,7 @@ fn node_depends_on_node(dependent: &Node, dependee_id: usize, nodes: &Vec<Node>)
         }
     }
 
-    return false;
+    false
 }
 
 fn node_depends_on_stage(node: &Node, stage: &BTreeSet<usize>, nodes: &Vec<Node>) -> bool {
@@ -135,7 +135,7 @@ fn node_depends_on_stage(node: &Node, stage: &BTreeSet<usize>, nodes: &Vec<Node>
         }
     }
 
-    return false;
+    false
 }
 
 fn stage_depends_on_node(node_id: usize, stage: &BTreeSet<usize>, nodes: &Vec<Node>) -> bool {
@@ -147,7 +147,7 @@ fn stage_depends_on_node(node_id: usize, stage: &BTreeSet<usize>, nodes: &Vec<No
         }
     }
 
-    return false;
+    false
 }
 
 fn add_node_to_plan(
@@ -156,7 +156,7 @@ fn add_node_to_plan(
     plan: &mut Vec<BTreeSet<usize>>,
     nodes: &Vec<Node>,
 ) {
-    for (stage_index, stage) in plan.into_iter().enumerate() {
+    for (stage_index, stage) in plan.iter_mut().enumerate() {
         if node_depends_on_stage(node, stage, nodes) {
             continue;
         } else if stage_depends_on_node(node_id, stage, nodes) {
@@ -171,13 +171,13 @@ fn add_node_to_plan(
     plan.push(BTreeSet::from([node_id]));
 }
 
-fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), PlannerError> {
+fn valid_input_outputs(tasks: &[Task], nodes: &[Node]) -> Result<(), PlannerError> {
     let mut output_task_name_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (task_id, task) in tasks.iter().enumerate() {
         for outputs in &task.outputs {
             for output in outputs {
-                if let Some(_) = output_task_name_map.insert(&output.name, task_id) {
+                if output_task_name_map.insert(&output.name, task_id).is_some() {
                     return Err(PlannerError::OutputNotUnique(output.name.clone()));
                 }
             }
@@ -201,10 +201,10 @@ fn valid_input_outputs(tasks: &Vec<Task>, nodes: &Vec<Node>) -> Result<(), Plann
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
-pub fn construct_plan(tasks: &Vec<Task>) -> Result<Plan, PlannerError> {
+pub fn construct_plan(tasks: &[Task]) -> Result<Plan, PlannerError> {
     let nodes = construct_nodes(tasks)?;
 
     if let Some(node_id) = is_cyclic(&nodes) {

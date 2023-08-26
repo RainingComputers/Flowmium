@@ -11,7 +11,7 @@ pub enum SecretsCrudError {
     #[error("secret {0} already exists error")]
     SecretAlreadyExists(String),
     #[error("database query error: {0}")]
-    DatabaseQueryError(#[source] sqlx::error::Error),
+    DatabaseQuery(#[source] sqlx::error::Error),
 }
 
 #[derive(Clone)]
@@ -41,7 +41,7 @@ impl SecretsCrud {
                     }
                 }
 
-                Err(SecretsCrudError::DatabaseQueryError(error))
+                Err(SecretsCrudError::DatabaseQuery(error))
             }
         }
     }
@@ -54,7 +54,7 @@ impl SecretsCrud {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to delete secret {}", key);
-                return Err(SecretsCrudError::DatabaseQueryError(error));
+                return Err(SecretsCrudError::DatabaseQuery(error));
             }
         };
 
@@ -73,7 +73,7 @@ impl SecretsCrud {
             Ok(result) => result.rows_affected(),
             Err(error) => {
                 tracing::error!(%error, "Unable to delete secret {}", key);
-                return Err(SecretsCrudError::DatabaseQueryError(error));
+                return Err(SecretsCrudError::DatabaseQuery(error));
             }
         };
 
@@ -91,7 +91,7 @@ impl SecretsCrud {
             Ok(secret_optional) => secret_optional,
             Err(error) => {
                 tracing::error!(%error, "Could not fetch secret for secrets database");
-                return Err(SecretsCrudError::DatabaseQueryError(error));
+                return Err(SecretsCrudError::DatabaseQuery(error));
             }
         };
 

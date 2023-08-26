@@ -24,7 +24,7 @@ pub async fn init_db_and_get_pool(config: PostgresConfig) -> Option<Pool<Postgre
         Ok(()) => Some(pool),
         Err(error) => {
             tracing::error!(%error, "Unable to run migrations");
-            return None;
+            None
         }
     }
 }
@@ -53,5 +53,5 @@ pub async fn get_test_pool(tables_to_clear: &'static [&'static str]) -> Pool<Pos
             .unwrap();
     }
 
-    return pool;
+    pool
 }

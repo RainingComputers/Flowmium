@@ -15,7 +15,7 @@ impl fmt::Display for Okay {
 
 impl fmt::Display for BytesDownloaded {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "Downloaded {} bytes", self.bytes());
+        write!(f, "Downloaded {} bytes", self.bytes())
     }
 }
 
