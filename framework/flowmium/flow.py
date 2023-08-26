@@ -45,8 +45,8 @@ class ArgDoesNotExist(Exception):
 
 
 class Flow:
-    INPUT_PATH_TEMPLATE = "task-inputs-{}.pkl"
-    OUTPUT_PATH_TEMPLATE = "task-output-{}.pkl"
+    INPUT_PATH_TEMPLATE = "task-inputs-{}.{}"
+    OUTPUT_PATH_TEMPLATE = "task-output-{}.{}"
     OUTPUT_NAME_TEMPLATE = "{}-output"
 
     def __init__(self, name: str) -> None:
@@ -62,6 +62,7 @@ class Flow:
         self,
         arg_names_list: list[str],
         input_dict_tuple: tuple[str, Callable],
+        file_ext: str,
     ) -> Input:
         arg_name, inp_task_func = input_dict_tuple
 
@@ -74,7 +75,7 @@ class Flow:
             depends=input_task_name,
             arg_name=arg_name,
             frm=Flow.OUTPUT_NAME_TEMPLATE.format(input_task_name),
-            path=Flow.INPUT_PATH_TEMPLATE.format(arg_name),
+            path=Flow.INPUT_PATH_TEMPLATE.format(arg_name, file_ext),
             load=self.serializers[input_task_name].load,
         )
 
@@ -98,7 +99,7 @@ class Flow:
 
             task_output = Output(
                 name=Flow.OUTPUT_NAME_TEMPLATE.format(task_name),
-                path=Flow.OUTPUT_PATH_TEMPLATE.format(task_name),
+                path=Flow.OUTPUT_PATH_TEMPLATE.format(task_name, serializer.ext),
                 dump=serializer.dump,
             )
 
@@ -107,7 +108,7 @@ class Flow:
             )
 
             task_inputs = [
-                self._parse_inputs_dict_tuple(arg_names_list, item)
+                self._parse_inputs_dict_tuple(arg_names_list, item, serializer.ext)
                 for item in inputs.items()
             ]
 

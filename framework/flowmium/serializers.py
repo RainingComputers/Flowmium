@@ -1,48 +1,53 @@
 import pickle
-from typing import Any, Callable
+import json
+from typing import Any, Callable, IO
 from pathlib import Path
 
 from dataclasses import dataclass
 
 
-__all__ = ["pkl", "plain_text"]
+__all__ = ["pkl", "plain_text", "json_text"]
 
 
 @dataclass
 class Serializer:
-    dump: Callable[[Any, str], None]
-    load: Callable[[str], Any]
+    dump_func: Callable[[Any, IO[Any]], Any]
+    load_func: Callable[[IO[Any]], Any]
+    ext: str
+    write_mode: str
+    read_mode: str
 
+    def dump(self, obj: Any, path: str) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
 
-def dump_pkl(obj: Any, path: str) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, self.write_mode) as output_file:
+            self.dump_func(obj, output_file)
 
-    with open(path, "wb") as output_file:
-        pickle.dump(obj, output_file)
-
-
-def load_pkl(path: str) -> Any:
-    with open(path, "rb") as output_file:
-        return pickle.load(output_file)
+    def load(self, path: str) -> Any:
+        with open(path, self.read_mode) as output_file:
+            return self.load_func(output_file)
 
 
 pkl = Serializer(
-    dump=dump_pkl, load=load_pkl
+    dump_func=pickle.dump,
+    load_func=pickle.load,
+    ext="pkl",
+    write_mode="wb",
+    read_mode="rb",
 )
 
-
-def dump_plain_text(obj: Any, path: str) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-    with open(path, "w") as output_file:
-        output_file.write(str(obj))
-
-
-def load_plain_text(path: str) -> str:
-    with open(path, "r") as output_file:
-        return output_file.read()
-
-
 plain_text = Serializer(
-    dump=dump_plain_text, load=load_plain_text
+    dump_func=lambda obj, fp: fp.write(str(obj)),
+    load_func=lambda fp: fp.read(),
+    ext="txt",
+    write_mode="w",
+    read_mode="r",
+)
+
+json_text = Serializer(
+    dump_func=json.dump,
+    load_func=json.load,
+    ext="json",
+    write_mode="w",
+    read_mode="r",
 )
