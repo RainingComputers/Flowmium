@@ -85,8 +85,13 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
         }
     };
 
-    let Ok(bucket) = get_bucket(&config.access_key, &config.secret_key, &config.bucket_name, config.store_url) else {
-        return  ExitCode::FAILURE;
+    let Ok(bucket) = get_bucket(
+        &config.access_key,
+        &config.secret_key,
+        &config.bucket_name,
+        config.store_url,
+    ) else {
+        return ExitCode::FAILURE;
     };
 
     if let Some(inputs) = option_inputs {

@@ -368,11 +368,11 @@ impl Scheduler {
         tasks: serde_json::Value,
     ) -> Option<Vec<(i32, Task)>> {
         let Ok(task_ids) = serde_json::from_value::<BTreeSet<i32>>(task_id_list?) else {
-            return  None;
+            return None;
         };
 
         let Ok(task_definitions) = serde_json::from_value::<Vec<Task>>(tasks) else {
-            return  None;
+            return None;
         };
 
         let task_defs_filtered = task_definitions

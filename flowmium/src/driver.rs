@@ -81,11 +81,11 @@ fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &Ex
 #[tracing::instrument]
 async fn run_server(server_opts: ServerOpts) -> ExitCode {
     let Some(pool) = get_pool().await else {
-        return  ExitCode::FAILURE;
+        return ExitCode::FAILURE;
     };
 
     let Some(executor_config) = get_executor_config().await else {
-        return  ExitCode::FAILURE;
+        return ExitCode::FAILURE;
     };
 
     let Ok(bucket) = get_bucket_from_executor_config(&executor_config) else {

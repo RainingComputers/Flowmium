@@ -332,7 +332,7 @@ async fn get_task_status(
 
     let Some(phase) = get_pod_phase(pod.to_owned()) else {
         tracing::error!("Unable to fetch status for pod");
-        return Err(ExecutorError::UnexpectedRunnerState(flow_id, task_id))
+        return Err(ExecutorError::UnexpectedRunnerState(flow_id, task_id));
     };
 
     let status = phase_to_task_status(phase);

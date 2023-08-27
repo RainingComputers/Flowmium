@@ -188,7 +188,10 @@ fn valid_input_outputs(tasks: &[Task], nodes: &[Node]) -> Result<(), PlannerErro
         for inputs in &task.inputs {
             for input in inputs {
                 let Some(from_task_id) = output_task_name_map.get(&input.from) else {
-                    return Err(PlannerError::OutputDoesNotExist(  task.name.clone(), input.from.clone()));
+                    return Err(PlannerError::OutputDoesNotExist(
+                        task.name.clone(),
+                        input.from.clone(),
+                    ));
                 };
 
                 if !nodes[task_id].children.contains(from_task_id) {
