@@ -30,7 +30,7 @@ jobs:
         timeout-minutes: 5
         run: |
           for cid in $(docker ps -a -q); do
-            while [ "`docker inspect -f {{.State.Health.Status}} $cid`" != "healthy" ]; do
+            while [ "`docker inspect -f {{.State.Status}} $cid`" != "running" ]; do
               sleep 2;
             done
           done
