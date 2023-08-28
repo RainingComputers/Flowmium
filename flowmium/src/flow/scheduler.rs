@@ -605,6 +605,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_scheduler_flow_does_not_exist() {
         let pool = get_test_pool(&["flows"]).await;
 
