@@ -7,7 +7,7 @@ use crate::client::requests;
 use crate::client::requests::ClientError;
 use crate::flow::model::Flow;
 
-pub async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
+async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
 where
     F: Future<Output = Result<T, ClientError>>,
     T: std::fmt::Display,
