@@ -13,7 +13,7 @@ on:
 
 jobs:
   rust-check:
-    name: Code formatting, type and semantic checking
+    name: Checks for Rust
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,3 +49,28 @@ jobs:
       - name: Run tests
         run: make test
         working-directory: flowmium
+  python-check:
+    name: Checks for Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: Install dependencies
+        run: poetry install
+        working-directory: framework
+      - name: Check formatting
+        run: poetry run black . --check
+        working-directory: framework
+      - name: Run flake8
+        run: poetry run flake8 flowmium tests
+        working-directory: framework
+      - name: Run mypy
+        run: poetry run mypy flowmium tests
+        working-directory: framework
+      - name: Run pytest
+        run: poetry run pytest
+        working-directory: framework
