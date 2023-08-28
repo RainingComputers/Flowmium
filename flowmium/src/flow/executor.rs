@@ -50,6 +50,8 @@ pub enum ExecutorError {
     ),
     #[error("flow name longer than 32 characters: {0}")]
     FlowNameTooLong(String),
+    #[error("Unknown task status for flow {0} task {1}: {2}")]
+    UnknownTaskStatus(i32, i32, String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -58,7 +60,6 @@ enum TaskStatus {
     Running,
     Finished,
     Failed,
-    Unknown,
 }
 
 #[derive(Debug, PartialEq, Deserialize, Clone)]
@@ -299,14 +300,14 @@ fn get_pod_phase(pod: Pod) -> Option<String> {
     Some(phase)
 }
 
-fn phase_to_task_status(phase: String) -> TaskStatus {
+fn phase_to_task_status(phase: &String) -> Option<TaskStatus> {
     match &phase[..] {
-        "Pending" => TaskStatus::Pending,
-        "Running" => TaskStatus::Running,
-        "Succeeded" => TaskStatus::Finished,
-        "Failed" => TaskStatus::Failed,
-        "StartError" => TaskStatus::Failed,
-        _ => TaskStatus::Unknown,
+        "Pending" => Some(TaskStatus::Pending),
+        "Running" => Some(TaskStatus::Running),
+        "Succeeded" => Some(TaskStatus::Finished),
+        "Failed" => Some(TaskStatus::Failed),
+        "StartError" => Some(TaskStatus::Failed),
+        _ => None,
     }
 }
 
@@ -335,7 +336,13 @@ async fn get_task_status(
         return Err(ExecutorError::UnexpectedRunnerState(flow_id, task_id));
     };
 
-    let status = phase_to_task_status(phase);
+    let status = phase_to_task_status(&phase);
+
+    let Some(status) = status else {
+        tracing::error!("Unknown status for pod");
+        return Err(ExecutorError::UnknownTaskStatus(flow_id, task_id, phase));
+    };
+
     Ok(status)
 }
 
@@ -395,7 +402,7 @@ async fn mark_running_tasks(
     match status {
         TaskStatus::Pending | TaskStatus::Running => Ok(()),
         TaskStatus::Finished => sched.mark_task_finished(flow_id, task_id).await,
-        TaskStatus::Failed | TaskStatus::Unknown => sched.mark_task_failed(flow_id, task_id).await,
+        TaskStatus::Failed => sched.mark_task_failed(flow_id, task_id).await,
     }
 }
 
