@@ -69,7 +69,7 @@ pub async fn run() -> ExitCode {
         },
         args::Command::Download(download_opts) => {
             make_request(|| {
-                requests::download_artefact(
+                requests::download_artefact_to_path(
                     &args.url,
                     &download_opts.id,
                     &download_opts.name,

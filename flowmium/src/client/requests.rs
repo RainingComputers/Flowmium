@@ -1,4 +1,5 @@
 use getset::Getters;
+use reqwest::Response;
 use thiserror::Error;
 use tokio_stream::StreamExt;
 use url::Url;
@@ -97,7 +98,7 @@ pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> 
     Ok(reqwest::get(abs_url).await?.json::<FlowRecord>().await?)
 }
 
-pub async fn check_status(response: reqwest::Response) -> Result<reqwest::Response, ClientError> {
+async fn check_status(response: reqwest::Response) -> Result<reqwest::Response, ClientError> {
     let response_status = response.status();
 
     if response_status != 200 {
@@ -110,7 +111,7 @@ pub async fn check_status(response: reqwest::Response) -> Result<reqwest::Respon
     Ok(response)
 }
 
-pub async fn check_status_take(response: reqwest::Response) -> Result<Okay, ClientError> {
+async fn check_status_take(response: reqwest::Response) -> Result<Okay, ClientError> {
     check_status(response).await?;
     Ok(Okay())
 }
@@ -154,17 +155,21 @@ fn get_path_from_response_url(
     Path::new(dir_path).join(file_name)
 }
 
-pub async fn download_artefact(
+pub async fn download_artefact(url: &str, id: &str, name: &str) -> Result<Response, ClientError> {
+    let abs_url = get_abs_url(url, &format!("/api/v1/artefact/{}/{}", id, name))?;
+
+    let response = reqwest::get(abs_url).await?;
+
+    check_status(response).await
+}
+
+pub async fn download_artefact_to_path(
     url: &str,
     id: &str,
     name: &str,
     dest: &str,
 ) -> Result<BytesDownloaded, ClientError> {
-    let abs_url = get_abs_url(url, &format!("/api/v1/artefact/{}/{}", id, name))?;
-
-    let response = reqwest::get(abs_url).await?;
-
-    let response = check_status(response).await?;
+    let response = download_artefact(url, id, name).await?;
 
     let file_path = get_path_from_response_url(&response, dest, &format!("flow-{}-output", id));
 
