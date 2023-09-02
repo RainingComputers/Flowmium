@@ -1,3 +1,19 @@
+"""
+Contains built in serializers
+
+.. data:: pkl
+
+    Uses python pickle to serialize data.
+
+.. data:: plain_text
+
+    Uses the :code:`str()` function in python to serialize to plain text.
+
+.. data:: json_text
+
+    Uses the :code:`json` module to serialize data to json string.
+"""
+
 import pickle
 import json
 from typing import Any, Callable, IO
@@ -11,6 +27,21 @@ __all__ = ["pkl", "plain_text", "json_text"]
 
 @dataclass
 class Serializer:
+    """
+    Define a custom serializer
+
+    Args:
+        dump_func: A functions that takes in any object and a file pointer and
+            writes the serialized form of the object to the file pointer.
+        load_func: A function that takes in a file pointer and returns a python
+            object or type by deserializing the contents of the file pointer.
+        ext: Name of the file extension used by the serialization format, example :code:`json`
+        write_mode: The mode of the file pointer for :code:`dump_func`. For example :code:`'wb'`
+            or :code:`'w'`.
+        read_mode: The mode of the file pointer  for :code:`load_func`. For example :code:`'rb'`
+            or :code:`'r'`.
+    """
+
     dump_func: Callable[[Any, IO[Any]], Any]
     load_func: Callable[[IO[Any]], Any]
     ext: str
