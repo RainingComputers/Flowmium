@@ -1,7 +1,7 @@
 flowmium
 ========
 
-This is the documentation for Python client and flow definition framework for the Flowmium Kubernetes Workflow orchestrator.
+This is the documentation for Python client and flow definition framework for the Flowmium Kubernetes Workflow orchestrator. See `repository documentation <https://github.com/RainingComputers/Flowmium>`_ for deployment details.
 
 Installation
 ------------
@@ -31,7 +31,7 @@ Example
 
 An example flow would look like this. 
 
-.. literalinclude:: ../test.py
+.. literalinclude:: ../tests/example_flow.py
 
 To run this, first you would package it as a docker image and upload it to a registry that
 is accessible from the Kubernetes cluster that the orchestrator is running on. Then you can run something like
@@ -40,6 +40,9 @@ below to submit and run the flow
 .. code-block::
 
     python3 flow.py --image registry:5000/py-flow-test:latest --cmd python3 flow.py --flowmium-server http://localhost:8080
+
+
+See the `examples <https://github.com/RainingComputers/Flowmium/tree/main/examples>`_ folder for more details.
 
 .. _serializers:
 
