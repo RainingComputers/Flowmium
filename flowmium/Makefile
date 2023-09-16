@@ -1,3 +1,5 @@
+.PHONY: down up test watch
+
 down:
 	docker-compose -f test-services.yaml down
 

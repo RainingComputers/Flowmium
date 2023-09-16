@@ -1,0 +1,6 @@
+.venv/
+**/__pycache__/**
+docs/_build/
+docs/_static/
+docs/_templates/
+dist/

@@ -1,0 +1,30 @@
+name: testing
+tasks:
+  - name: hallo-world
+    image: debian:latest
+    depends: []
+    cmd:
+      - sh
+      - -c
+      - echo $MESSAGE  >> /task-output-foo.txt
+    env:
+      - name: MESSAGE
+        value: Hallo world
+    outputs:
+      - name: foo-output
+        path: /task-output-foo.txt
+  - name: replace-letter-a
+    image: debian:latest
+    depends:
+      - hallo-world
+    cmd:
+      - sh
+      - -c
+      - cat /task-input.txt | sed 's/a/e/g' > /task-output-replace-letter-a.txt
+    env: []
+    inputs:
+      - from: foo-output
+        path: /task-input.txt
+    outputs:
+      - name: replace-letter-a-output
+        path: /task-output-replace-letter-a.txt

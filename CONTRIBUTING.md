@@ -1,9 +1,8 @@
 # Running tests
 
-## Running integration test for python framework and executor from source
+## Running integration test for python framework and executor from source (Linux)
 
-These instructions will allow you to run an example python flow (`tests/example_flow.py`) all from local source without pulling from upstream (including the executor) if you are on Linux.
-If you are on MacOS or Windows, only the init container will be pulled from upstream, but rest will still run from source.
+These instructions will allow you to run an example python flow (`framework/tests/example_flow.py`) all from local source without pulling from upstream (including the executor).
 Use this to validate your changes.
 Instructions assume you are at the root of the repo.
 
@@ -27,14 +26,6 @@ Instructions assume you are at the root of the repo.
     make watch
     ```
 
--   Watch flow status using `flowctl`
-
-    ```
-    cd flowmium/
-    cargo build
-    watch ./target/debug/flowctl list
-    ```
-
 -   Run tests (this is required)
 
     ```
@@ -56,6 +47,14 @@ Instructions assume you are at the root of the repo.
     cargo run --bin flowmium -- server --port 8080
     ```
 
+-   Watch flow status using `flowctl`
+
+    ```
+    cd flowmium/
+    cargo build
+    watch ./target/debug/flowctl list
+    ```
+
 -   Build and push the example flow (NOTE: You might want to use a different image name if you running the test for the second time or prune docker images on your machine)
 
     ```
@@ -68,7 +67,7 @@ Instructions assume you are at the root of the repo.
 -   Submit the flow to the executor server
 
     ```
-    python3 test.py --image registry:5000/py-flow-test:latest --cmd python3 tests/example_flow.py --flowmium-server http://localhost:8080
+    python3 -m tests --image registry:5000/py-flow-test:latest --cmd 'python3 -m tests' --flowmium-server http://localhost:8080
     ```
 
 ## Running unit tests for python framework
