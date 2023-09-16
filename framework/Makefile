@@ -1,4 +1,4 @@
-.PHONY: help clean test lint quality docs
+.PHONY: clean test lint docs requirements
 
 
 clean:
@@ -12,7 +12,7 @@ clean:
 	rm -f -r dist/
 
 test:
-	pytest tests
+	pytest tests -vv
 
 format:
 	black .
@@ -25,3 +25,6 @@ docs:
 	make -C docs/ clean
 	make -C docs/ html
 	open docs/_build/html/index.html
+
+requirements:
+	poetry export -f requirements.txt --output requirements.txt

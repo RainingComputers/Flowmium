@@ -248,16 +248,17 @@ class Flow:
         import requests
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--cmd", required=True, type=str, nargs="+")
+        parser.add_argument("--cmd", required=True, type=str)
         parser.add_argument("--image", required=True, type=str)
         parser.add_argument("--flowmium-server", required=True, type=str)
+        parser.add_argument("-m", required=False, type=str)
         parser.add_argument(
             "--dry-run", required=False, default=False, action="store_true"
         )
 
         args = parser.parse_args()
 
-        dag = self.get_dag_dict(args.image, args.cmd, secrets_refs)
+        dag = self.get_dag_dict(args.image, args.cmd.split(" "), secrets_refs)
 
         if args.dry_run:
             print(json.dumps(dag, indent=4))

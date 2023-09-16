@@ -15,7 +15,9 @@ def test_dag_yaml() -> None:
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
                 "inputs": [],
-                "outputs": [{"name": "foo-output.pkl", "path": "task-output-foo.pkl"}],
+                "outputs": [
+                    {"name": "foo-output.json", "path": "task-output-foo.json"}
+                ],
             },
             {
                 "name": "replace-letter-a",
@@ -27,7 +29,7 @@ def test_dag_yaml() -> None:
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
                 "inputs": [
-                    {"from": "foo-output.pkl", "path": "task-inputs-input_str.pkl"}
+                    {"from": "foo-output.json", "path": "task-inputs-input_str.json"}
                 ],
                 "outputs": [
                     {
@@ -46,12 +48,12 @@ def test_dag_yaml() -> None:
                     {"name": "GREETINGS", "fromSecret": "test-greetings-secret"},
                 ],
                 "inputs": [
-                    {"from": "foo-output.pkl", "path": "task-inputs-input_str.pkl"}
+                    {"from": "foo-output.json", "path": "task-inputs-input_str.json"}
                 ],
                 "outputs": [
                     {
-                        "name": "replace-letter-t-output.json",
-                        "path": "task-output-replace-letter-t.json",
+                        "name": "replace-letter-t-output.pkl",
+                        "path": "task-output-replace-letter-t.pkl",
                     }
                 ],
             },
@@ -66,8 +68,8 @@ def test_dag_yaml() -> None:
                 ],
                 "inputs": [
                     {
-                        "from": "replace-letter-t-output.json",
-                        "path": "task-inputs-first.json",
+                        "from": "replace-letter-t-output.pkl",
+                        "path": "task-inputs-first.pkl",
                     },
                     {
                         "from": "replace-letter-a-output.txt",
@@ -75,7 +77,7 @@ def test_dag_yaml() -> None:
                     },
                 ],
                 "outputs": [
-                    {"name": "concat-output.pkl", "path": "task-output-concat.pkl"}
+                    {"name": "concat-output.txt", "path": "task-output-concat.txt"}
                 ],
             },
         ],
