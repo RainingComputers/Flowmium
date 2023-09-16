@@ -14,3 +14,4 @@ python:
     - method: pip
       path: framework/
     - requirements: requirements.txt
+      path: framework/
