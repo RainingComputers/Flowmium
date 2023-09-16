@@ -1,29 +1,4 @@
-from flowmium import Flow, FlowContext
-from flowmium.serializers import json_text, plain_text
-import os
-
-
-flow = Flow("testing")
-
-
-@flow.task()
-def foo() -> str:
-    return os.environ["GREETINGS"]
-
-
-@flow.task({"input_str": foo}, serializer=plain_text)
-def replace_letter_a(input_str: str, flowctx: FlowContext) -> str:
-    return input_str.replace("a", "e") + str(flowctx.task_id)
-
-
-@flow.task({"input_str": foo}, serializer=json_text)
-def replace_letter_t(input_str: str) -> str:
-    return input_str.replace("t", "d")
-
-
-@flow.task({"first": replace_letter_t, "second": replace_letter_a})
-def concat(first: str, second: str) -> str:
-    return f"{first} {second}"
+from tests.example_flow import flow
 
 
 def test_dag_yaml() -> None:

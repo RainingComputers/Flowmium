@@ -27,4 +27,5 @@ def concat(first: str, second: str) -> str:
     return f"{first} {second}"
 
 
-flow.run()
+if __name__ == "__main__":
+    flow.run()
