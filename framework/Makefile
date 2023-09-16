@@ -27,4 +27,4 @@ docs:
 	open docs/_build/html/index.html
 
 requirements:
-	poetry export -f requirements.txt --output requirements.txt
+	poetry export -f requirements.txt --output requirements.txt --with dev
