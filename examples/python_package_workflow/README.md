@@ -3,7 +3,7 @@
 -   Run postgres, minio, registry, kubernetes and flowmium on your machine as docker containers
 
     ```
-    docker-compose -f test-services.yaml up
+    docker-compose up
     ```
 
 -   Build python flow and push it to the registry (NOTE: It is recommended to change version with each build instead of latest)

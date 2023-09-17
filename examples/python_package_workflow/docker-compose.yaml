@@ -1,0 +1,101 @@
+version: "3"
+services:
+    kubernetes:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.2
+        image: "rancher/k3s:${K3S_VERSION:-latest}"
+        command:
+            - server
+        tmpfs:
+            - /run
+            - /var/run
+        privileged: true
+        environment:
+            - K3S_TOKEN=secret
+            - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+            - K3S_KUBECONFIG_MODE=666
+        volumes:
+            - .:/output
+            - ./test-registries.yaml:/etc/rancher/k3s/registries.yaml
+        ports:
+            - 6443:6443
+    registry:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.3
+        image: registry:latest
+        ports:
+            - 5000:5000
+    minio:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.4
+        command: server /data --console-address ":9001"
+        image: minio/minio:latest
+        environment:
+            - MINIO_ACCESS_KEY=minio
+            - MINIO_SECRET_KEY=password
+        ports:
+            - 9000:9000
+            - 9001:9001
+    postgres:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.7
+        image: postgres:latest
+        restart: always
+        environment:
+            - DATABASE_HOST=127.0.0.1
+            - POSTGRES_USER=flowmium
+            - POSTGRES_PASSWORD=flowmium
+            - POSTGRES_DB=flowmium
+        ports:
+            - "5432:5432"
+    buckets:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.5
+        image: minio/mc
+        depends_on:
+            - minio
+        entrypoint: >
+            /bin/sh -c "
+            /usr/bin/mc config host add testminio http://minio:9000 minio password;
+            /usr/bin/mc rm -r --force testminio/flowmium-test;
+            /usr/bin/mc mb testminio/flowmium-test;
+            /usr/bin/mc policy download testminio/flowmium-test;
+            exit 0;
+            "
+    flowmium:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.6
+        image: flowmium-debug
+        ports:
+            - "8080:8080"
+        entrypoint: >
+            /bin/sh -c "
+            sed 's/127.0.0.1/172.16.238.2/g' /project/kubeconfig.yaml | sed 's/certificate-authority-data:.*/insecure-skip-tls-verify: true/g' > /kubeconfig.yaml;
+            /flowmium server --port 8080;
+            "
+        depends_on:
+            - minio
+            - kubernetes
+            - postgres
+        environment:
+            - FLOWMIUM_POSTGRES_URL=postgres://flowmium:flowmium@172.16.238.7/flowmium
+            - FLOWMIUM_STORE_URL=http://172.16.238.4:9000
+            - FLOWMIUM_BUCKET_NAME=flowmium-test
+            - FLOWMIUM_ACCESS_KEY=minio
+            - FLOWMIUM_SECRET_KEY=password
+            - FLOWMIUM_EXECUTOR_IMAGE=registry:5000/flowmium-debug
+            - KUBECONFIG=/kubeconfig.yaml
+        volumes:
+            - .:/project
+networks:
+    testnet:
+        ipam:
+            driver: default
+            config:
+                - subnet: "172.16.238.0/24"
