@@ -15,8 +15,8 @@ test:
 
 	# TODO: Add argument to use source else pull init container from upstream by default
 	# Build executable and package into a docker image
-	RUSTFLAGS="-C target-feature=+crt-static" cargo build --target `uname -m`-unknown-linux-gnu
-	docker build . -f test-dockerfile -t flowmium-debug --build-arg="TARGET_TRIPLE=`uname -m`-unknown-linux-gnu"
+	cargo build
+	docker build . -f test-dockerfile -t flowmium-debug
 
 	# Push the docker image with static executble into the registry in test services
 	docker tag flowmium-debug localhost:5000/flowmium-debug:latest

@@ -1,5 +1,3 @@
 FROM debian
 
-
-ARG TARGET_TRIPLE
-COPY ./target/${TARGET_TRIPLE}/debug/flowmium .
+COPY ./target/release/flowmium .

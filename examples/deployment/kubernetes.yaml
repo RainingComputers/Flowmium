@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowmium-server
+  labels:
+    app: flowmium-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flowmium-server
+  template:
+    metadata:
+      labels:
+        app: flowmium-server
+    spec:
+      serviceAccountName: flowmium-server-sa
+      containers:
+        - name: flowmium-server
+          image: "registry:5000/flowmium-debug"
+          command:
+            - /flowmium
+            - server
+            - --port
+            - "8080"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: 1024Mi
+              cpu: 1000m
+            limits:
+              memory: 1025Mi
+              cpu: 1000m
+          env:
+            - name: FLOWMIUM_POSTGRES_URL
+              value: "postgres://flowmium:flowmium@flowmium-postgres-service.default.svc.cluster.local/flowmium"
+            - name: FLOWMIUM_STORE_URL
+              value: "http://flowmium-minio-service.default.svc.cluster.local:9000"
+            - name: FLOWMIUM_BUCKET_NAME
+              value: "flowmium-test"
+            - name: FLOWMIUM_ACCESS_KEY
+              value: "minio"
+            - name: FLOWMIUM_SECRET_KEY
+              value: "password"
+            - name: FLOWMIUM_EXECUTOR_IMAGE
+              value: "registry:5000/flowmium-debug"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowmium-server-service
+spec:
+  selector:
+    app: flowmium-server
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flowmium-server-sa
+  namespace: default
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: flowmium-server-role
+rules:
+  - apiGroups: ["*"]
+    resources: ["jobs", "pods"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flowmium-server-bind
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: flowmium-server-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: flowmium-server-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowmium-postgres
+  labels:
+    app: flowmium-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flowmium-postgres
+  template:
+    metadata:
+      labels:
+        app: flowmium-postgres
+    spec:
+      containers:
+        - name: flowmium-postgres
+          image: postgres:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: DATABASE_HOST
+              value: "127.0.0.1"
+            - name: POSTGRES_USER
+              value: flowmium
+            - name: POSTGRES_PASSWORD
+              value: flowmium
+            - name: POSTGRES_DB
+              value: flowmium
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowmium-postgres-service
+spec:
+  selector:
+    app: flowmium-postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowmium-minio
+  labels:
+    app: flowmium-minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flowmium-minio
+  template:
+    metadata:
+      labels:
+        app: flowmium-minio
+    spec:
+      containers:
+        - name: flowmium-minio
+          image: minio/minio:latest
+          command:
+            - /bin/bash
+            - -c
+            - minio server /data --console-address ":9001"
+          ports:
+            - containerPort: 9000
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: minio
+            - name: MINIO_SECRET_KEY
+              value: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowmium-minio-service
+spec:
+  selector:
+    app: flowmium-minio
+  ports:
+    - name: api
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+    - name: console
+      protocol: TCP
+      port: 9001
+      targetPort: 9001

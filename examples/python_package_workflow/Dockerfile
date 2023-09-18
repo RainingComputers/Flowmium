@@ -1,5 +1,6 @@
-FROM python:3.11-alpine3.18
+FROM python:bookworm
+
+RUN pip install flowmium
 
 COPY . .
 
-RUN pip install flowmium

@@ -1,0 +1,35 @@
+version: "3"
+services:
+    kubernetes:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.2
+        image: "rancher/k3s:${K3S_VERSION:-latest}"
+        command:
+            - server
+        tmpfs:
+            - /run
+            - /var/run
+        privileged: true
+        environment:
+            - K3S_TOKEN=secret
+            - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+            - K3S_KUBECONFIG_MODE=666
+        volumes:
+            - .:/output
+            - ./test-registries.yaml:/etc/rancher/k3s/registries.yaml
+        ports:
+            - 6443:6443
+    registry:
+        networks:
+            testnet:
+                ipv4_address: 172.16.238.3
+        image: registry:latest
+        ports:
+            - 5000:5000
+networks:
+    testnet:
+        ipam:
+            driver: default
+            config:
+                - subnet: "172.16.238.0/24"
