@@ -515,7 +515,6 @@ mod tests {
     fn test_flow() -> Flow {
         Flow {
             name: "hello-world".to_owned(),
-            schedule: Some("".to_owned()),
             tasks: vec![
                 Task {
                     name: "task-e".to_string(),
@@ -698,7 +697,6 @@ mod tests {
     fn test_flow_fail() -> Flow {
         Flow {
             name: "hello-world".to_owned(),
-            schedule: Some("".to_owned()),
             tasks: vec![
                 Task {
                     name: "task-one".to_string(),

@@ -61,7 +61,6 @@ pub struct Task {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Flow {
     pub name: String,
-    pub schedule: Option<String>,
     pub tasks: Vec<Task>,
 }
 
@@ -73,7 +72,6 @@ mod tests {
     fn test_model() {
         let serialized = r#"
         name: "hello-world"
-        schedule: ""
         tasks:
           - name: "hello-world-zero"
             image: "foo/bar"
@@ -98,7 +96,6 @@ mod tests {
 
         let job_expected = Flow {
             name: "hello-world".to_owned(),
-            schedule: Some("".to_owned()),
             tasks: vec![Task {
                 name: "hello-world-zero".to_owned(),
                 image: "foo/bar".to_owned(),
