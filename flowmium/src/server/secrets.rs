@@ -2,7 +2,7 @@ use sqlx::{Pool, Postgres};
 
 use thiserror::Error;
 
-use crate::pool::check_rows_updated;
+use super::pool::check_rows_updated;
 
 #[derive(Error, Debug)]
 pub enum SecretsCrudError {
@@ -16,10 +16,14 @@ pub enum SecretsCrudError {
 
 #[derive(Clone)]
 pub struct SecretsCrud {
-    pub pool: Pool<Postgres>,
+    pool: Pool<Postgres>,
 }
 
 impl SecretsCrud {
+    pub fn new(pool: Pool<Postgres>) -> Self {
+        Self { pool }
+    }
+
     pub async fn create_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
         match sqlx::query!(
             r#"INSERT INTO secrets (secret_key, secret_value) VALUES ($1, $2)"#,
@@ -105,8 +109,7 @@ impl SecretsCrud {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::{
+    use crate::server::{
         pool::get_test_pool,
         secrets::{SecretsCrud, SecretsCrudError},
     };

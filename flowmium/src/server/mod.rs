@@ -4,5 +4,7 @@ pub mod driver;
 pub mod executor;
 pub mod model;
 pub mod planner;
+mod pool;
 pub mod record;
 pub mod scheduler;
+pub mod secrets;

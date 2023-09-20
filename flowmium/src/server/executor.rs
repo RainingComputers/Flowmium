@@ -1,6 +1,3 @@
-use crate::secrets::SecretsCrud;
-use crate::secrets::SecretsCrudError;
-
 use super::model::EnvVar;
 use super::model::Flow;
 use super::model::KeyValuePair;
@@ -10,6 +7,8 @@ use super::planner::construct_plan;
 use super::planner::PlannerError;
 use super::scheduler::Scheduler;
 use super::scheduler::SchedulerError;
+use super::secrets::SecretsCrud;
+use super::secrets::SecretsCrudError;
 
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::{api::batch::v1::Job, serde_json};
@@ -439,8 +438,10 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        pool::get_test_pool,
-        server::model::{Input, Output},
+        server::{
+            model::{Input, Output},
+            pool::get_test_pool,
+        },
         task::bucket::get_bucket,
     };
 
@@ -644,7 +645,7 @@ mod tests {
         let config = ExecutorConfig::new_with_default_labels(test_pod_config());
 
         let sched = Scheduler::new(pool.clone());
-        let secrets = SecretsCrud { pool };
+        let secrets = SecretsCrud::new(pool.clone());
 
         secrets
             .create_secret(
@@ -740,7 +741,7 @@ mod tests {
         let config = ExecutorConfig::new_with_default_labels(test_pod_config());
 
         let sched = Scheduler::new(pool.clone());
-        let secrets = SecretsCrud { pool };
+        let secrets = SecretsCrud::new(pool.clone());
 
         let flow_id = instantiate_flow(test_flow_fail(), &sched).await.unwrap();
 

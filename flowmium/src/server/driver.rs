@@ -1,9 +1,10 @@
-use crate::pool::{init_db_and_get_pool, PostgresConfig};
-use crate::secrets::SecretsCrud;
-use crate::task::{
-    bucket::get_bucket,
-    driver::{run_task, SidecarConfig},
-    errors::ArtefactError,
+use crate::{
+    server::secrets::SecretsCrud,
+    task::{
+        bucket::get_bucket,
+        driver::{run_task, SidecarConfig},
+        errors::ArtefactError,
+    },
 };
 use s3::Bucket;
 use sqlx::{Pool, Postgres};
@@ -17,6 +18,7 @@ use crate::server::{
 };
 
 use super::args::TaskOpts;
+use super::pool::{init_db_and_get_pool, PostgresConfig};
 
 pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
     let database_config: PostgresConfig = match envy::prefixed("FLOWMIUM_").from_env() {
@@ -70,7 +72,7 @@ pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config:
     tracing::info!("Starting scheduler loop");
 
     tokio::spawn(async move {
-        let secrets = SecretsCrud { pool: pool_loop };
+        let secrets = SecretsCrud::new(pool_loop);
 
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;

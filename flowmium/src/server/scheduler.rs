@@ -3,13 +3,12 @@ use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
 use crate::{
-    pool::check_rows_updated,
     server::record::FlowListRecord,
     server::record::{FlowRecord, FlowStatus},
 };
 use tokio::sync::broadcast;
 
-use super::{model::Task, planner::Plan, record::TaskStatus};
+use super::{model::Task, planner::Plan, pool::check_rows_updated, record::TaskStatus};
 
 use thiserror::Error;
 
@@ -439,7 +438,7 @@ impl Scheduler {
 mod tests {
 
     use super::*;
-    use crate::{pool::get_test_pool, server::model::Task};
+    use crate::server::{model::Task, pool::get_test_pool};
     use serial_test::serial;
     use std::collections::BTreeSet;
 

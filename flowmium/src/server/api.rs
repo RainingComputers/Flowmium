@@ -15,15 +15,17 @@ use actix_web_actors::ws;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 
 use crate::{
-    secrets::{SecretsCrud, SecretsCrudError},
     server::{
         executor::{instantiate_flow, ExecutorError},
         model::Flow,
         record::{FlowListRecord, FlowRecord},
         scheduler::{Scheduler, SchedulerError, SchedulerEvent},
+        secrets::SecretsCrud,
     },
     task::{bucket::get_artefact, driver::get_store_path, errors::ArtefactError},
 };
+
+use super::secrets::SecretsCrudError;
 
 impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
@@ -219,7 +221,7 @@ pub async fn start_server(
     bucket: Bucket,
 ) -> std::io::Result<()> {
     let sched = sched.clone();
-    let secrets = SecretsCrud { pool: pool.clone() };
+    let secrets = SecretsCrud::new(pool.clone());
 
     HttpServer::new(move || {
         App::new()
