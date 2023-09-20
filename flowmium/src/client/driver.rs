@@ -5,7 +5,7 @@ use crate::client::args;
 use crate::client::requests;
 
 use crate::client::requests::ClientError;
-use crate::flow::model::Flow;
+use crate::server::model::Flow;
 
 async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
 where

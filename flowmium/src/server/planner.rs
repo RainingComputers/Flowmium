@@ -18,7 +18,7 @@ pub enum PlannerError {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Node {
+pub(crate) struct Node {
     pub children: BTreeSet<usize>,
 }
 
@@ -207,7 +207,7 @@ fn valid_input_outputs(tasks: &[Task], nodes: &[Node]) -> Result<(), PlannerErro
     Ok(())
 }
 
-pub fn construct_plan(tasks: &[Task]) -> Result<Plan, PlannerError> {
+pub(crate) fn construct_plan(tasks: &[Task]) -> Result<Plan, PlannerError> {
     let nodes = construct_nodes(tasks)?;
 
     if let Some(node_id) = is_cyclic(&nodes) {
@@ -227,7 +227,7 @@ pub fn construct_plan(tasks: &[Task]) -> Result<Plan, PlannerError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::flow::model::{Input, Output};
+    use crate::server::model::{Input, Output};
 
     use super::*;
 

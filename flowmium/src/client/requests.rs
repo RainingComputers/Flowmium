@@ -7,8 +7,8 @@ use url::Url;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use crate::flow::model::Flow;
-use crate::flow::record::{FlowListRecord, FlowRecord};
+use crate::server::model::Flow;
+use crate::server::record::{FlowListRecord, FlowRecord};
 
 #[derive(Error, Debug)]
 pub enum ClientError {

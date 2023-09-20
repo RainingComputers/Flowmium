@@ -439,9 +439,9 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        artefacts::bucket::get_bucket,
-        flow::model::{Input, Output},
         pool::get_test_pool,
+        server::model::{Input, Output},
+        task::bucket::get_bucket,
     };
 
     use super::*;

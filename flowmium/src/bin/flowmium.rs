@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use flowmium::flow::driver;
+use flowmium::server::driver;
 
 #[tokio::main]
 async fn main() -> ExitCode {

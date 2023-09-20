@@ -1,16 +1,16 @@
-use crate::api::start_server;
-use crate::artefacts::{
-    bucket::get_bucket,
-    errors::ArtefactError,
-    task::{run_task, SidecarConfig},
-};
 use crate::pool::{init_db_and_get_pool, PostgresConfig};
 use crate::secrets::SecretsCrud;
+use crate::task::{
+    bucket::get_bucket,
+    driver::{run_task, SidecarConfig},
+    errors::ArtefactError,
+};
 use s3::Bucket;
 use sqlx::{Pool, Postgres};
 use std::{process::ExitCode, time::Duration};
 
-use crate::flow::{
+use crate::server::{
+    api::start_server,
     args,
     executor::{schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
     scheduler::Scheduler,

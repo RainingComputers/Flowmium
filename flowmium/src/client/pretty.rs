@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::flow::{
+use crate::server::{
     record::FlowRecord,
     record::{FlowListRecord, FlowStatus},
 };

@@ -3,9 +3,9 @@ use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
 use crate::{
-    flow::record::FlowListRecord,
-    flow::record::{FlowRecord, FlowStatus},
     pool::check_rows_updated,
+    server::record::FlowListRecord,
+    server::record::{FlowRecord, FlowStatus},
 };
 use tokio::sync::broadcast;
 
@@ -439,7 +439,7 @@ impl Scheduler {
 mod tests {
 
     use super::*;
-    use crate::{flow::model::Task, pool::get_test_pool};
+    use crate::{pool::get_test_pool, server::model::Task};
     use serial_test::serial;
     use std::collections::BTreeSet;
 
