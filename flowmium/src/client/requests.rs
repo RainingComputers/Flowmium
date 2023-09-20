@@ -69,7 +69,7 @@ impl<'a> IntoIterator for &'a FlowList {
 #[derive(Getters, Debug)]
 pub struct BytesDownloaded {
     #[getset(get = "pub")]
-    bytes: u64,
+    num_bytes: u64,
 }
 
 pub struct Okay();
@@ -179,7 +179,7 @@ pub async fn download_artefact_to_path(
 
     let num_bytes = std::io::copy(&mut content.as_bytes(), &mut file)?;
 
-    Ok(BytesDownloaded { bytes: num_bytes })
+    Ok(BytesDownloaded { num_bytes })
 }
 
 fn get_ws_scheme(secure: bool) -> &'static str {

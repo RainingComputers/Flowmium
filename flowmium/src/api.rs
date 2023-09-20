@@ -15,10 +15,9 @@ use actix_web_actors::ws;
 use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
 
 use crate::{
-    args::ServerOpts,
     artefacts::{bucket::get_artefact, errors::ArtefactError, task::get_store_path},
     flow::{
-        executor::{instantiate_flow, ExecutorConfig, ExecutorError},
+        executor::{instantiate_flow, ExecutorError},
         model::Flow,
         record::{FlowListRecord, FlowRecord},
         scheduler::{Scheduler, SchedulerError, SchedulerEvent},
@@ -214,10 +213,9 @@ async fn listen_to_scheduler(
 }
 
 pub async fn start_server(
-    server_opts: ServerOpts,
+    port: u16,
     pool: Pool<Postgres>,
     sched: &Scheduler,
-    executor_config: ExecutorConfig,
     bucket: Bucket,
 ) -> std::io::Result<()> {
     let sched = sched.clone();
@@ -226,7 +224,6 @@ pub async fn start_server(
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(sched.clone()))
-            .app_data(web::Data::new(executor_config.clone()))
             .app_data(web::Data::new(bucket.clone()))
             .app_data(web::Data::new(secrets.clone()))
             .service(
@@ -241,7 +238,7 @@ pub async fn start_server(
                     .service(listen_to_scheduler),
             )
     })
-    .bind(("0.0.0.0", server_opts.port))?
+    .bind(("0.0.0.0", port))?
     .run()
     .await
 }

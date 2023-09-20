@@ -40,7 +40,7 @@ pub enum SchedulerEvent {
 
 #[derive(Debug, Clone)]
 pub struct Scheduler {
-    pub pool: Pool<Postgres>,
+    pool: Pool<Postgres>,
     tx: broadcast::Sender<SchedulerEvent>,
 }
 
@@ -56,7 +56,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn create_flow(
+    pub(crate) async fn create_flow(
         &self,
         flow_name: String,
         plan: Plan,
@@ -123,7 +123,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn mark_task_running(
+    pub(crate) async fn mark_task_running(
         &self,
         flow_id: i32,
         task_id: i32,
@@ -161,7 +161,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn mark_task_finished(
+    pub(crate) async fn mark_task_finished(
         &self,
         flow_id: i32,
         task_id: i32,
@@ -205,7 +205,11 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn mark_task_failed(&self, flow_id: i32, task_id: i32) -> Result<(), SchedulerError> {
+    pub(crate) async fn mark_task_failed(
+        &self,
+        flow_id: i32,
+        task_id: i32,
+    ) -> Result<(), SchedulerError> {
         let rows_updated = match sqlx::query!(
             r#"
             UPDATE flows
@@ -239,7 +243,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_running_or_pending_flows_ids(
+    pub async fn get_running_or_pending_flow_ids(
         &self,
     ) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
         struct RunningPendingSelectQueryRecord {
@@ -386,7 +390,7 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn schedule_tasks<'a>(
+    pub(crate) async fn schedule_tasks<'a>(
         &'a self,
         flow_id: i32,
     ) -> Result<Option<Vec<(i32, Task)>>, SchedulerError> {
@@ -434,13 +438,10 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
 
-    use serial_test::serial;
-
-    use crate::{flow::model::Task, pool::get_test_pool};
-
-    use std::collections::BTreeSet;
-
     use super::*;
+    use crate::{flow::model::Task, pool::get_test_pool};
+    use serial_test::serial;
+    use std::collections::BTreeSet;
 
     fn create_fake_task(task_name: &str) -> Task {
         Task {
@@ -510,7 +511,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
+            scheduler.get_running_or_pending_flow_ids().await.unwrap(),
             vec![(flow_id_0, vec![]), (flow_id_1, vec![])],
         );
 
@@ -537,7 +538,7 @@ mod tests {
         scheduler.mark_task_running(flow_id_0, 2).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
+            scheduler.get_running_or_pending_flow_ids().await.unwrap(),
             vec![(flow_id_0, vec![1, 2]), (flow_id_1, vec![])],
         );
 
@@ -557,7 +558,7 @@ mod tests {
         assert_eq!(scheduler.schedule_tasks(flow_id_0).await.unwrap(), None);
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
+            scheduler.get_running_or_pending_flow_ids().await.unwrap(),
             vec![(flow_id_1, vec![])],
         );
 
@@ -569,7 +570,7 @@ mod tests {
         scheduler.mark_task_running(flow_id_1, 0).await.unwrap();
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
+            scheduler.get_running_or_pending_flow_ids().await.unwrap(),
             vec![(flow_id_1, vec![0])],
         );
 
@@ -580,7 +581,7 @@ mod tests {
         assert_eq!(scheduler.schedule_tasks(flow_id_1).await.unwrap(), None);
 
         assert_eq!(
-            scheduler.get_running_or_pending_flows_ids().await.unwrap(),
+            scheduler.get_running_or_pending_flow_ids().await.unwrap(),
             vec![]
         );
 

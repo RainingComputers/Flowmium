@@ -80,7 +80,7 @@ pub struct ExecutorConfig {
 }
 
 impl ExecutorConfig {
-    pub fn create_default_config(task_pod_config: TaskPodConfig) -> ExecutorConfig {
+    pub fn new_with_default_labels(task_pod_config: TaskPodConfig) -> ExecutorConfig {
         ExecutorConfig {
             namespace: "default".to_owned(),
             flow_id_label: "flowmium.io/flow-id".to_owned(),
@@ -300,8 +300,8 @@ fn get_pod_phase(pod: Pod) -> Option<String> {
     Some(phase)
 }
 
-fn phase_to_task_status(phase: &String) -> Option<TaskStatus> {
-    match &phase[..] {
+fn phase_to_task_status(phase: &str) -> Option<TaskStatus> {
+    match phase {
         "Pending" => Some(TaskStatus::Pending),
         "Running" => Some(TaskStatus::Running),
         "Succeeded" => Some(TaskStatus::Finished),
@@ -412,7 +412,7 @@ pub async fn schedule_and_run_tasks(
     config: &ExecutorConfig,
     secrets: &SecretsCrud,
 ) {
-    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flows_ids().await {
+    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flow_ids().await {
         for (flow_id, running_tasks) in tasks_to_schedule {
             match sched_pending_tasks(sched, flow_id, config, secrets).await {
                 Ok(true) => continue,
@@ -641,7 +641,7 @@ mod tests {
     #[serial]
     async fn test_schedule_and_run_tasks() {
         let pool = get_test_pool(&["flows", "secrets"]).await;
-        let config = ExecutorConfig::create_default_config(test_pod_config());
+        let config = ExecutorConfig::new_with_default_labels(test_pod_config());
 
         let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud { pool };
@@ -737,7 +737,7 @@ mod tests {
         delete_all_jobs().await;
 
         let pool = get_test_pool(&["flows", "secrets"]).await;
-        let config = ExecutorConfig::create_default_config(test_pod_config());
+        let config = ExecutorConfig::new_with_default_labels(test_pod_config());
 
         let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud { pool };
