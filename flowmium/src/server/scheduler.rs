@@ -169,7 +169,7 @@ impl Scheduler {
             r#"
             UPDATE flows
             SET running_tasks = array_remove(running_tasks, $1),
-            finished_tasks = array_append(finished_tasks, $1),
+                finished_tasks = array_append(finished_tasks, $1),
             status =
                     case
                         when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
@@ -397,8 +397,7 @@ impl Scheduler {
             r#"
             WITH updated AS (
                 UPDATE flows
-                SET 
-                    current_stage = 
+                SET current_stage = 
                         CASE 
                             WHEN status = 'running'::flow_status THEN current_stage + 1
                             ELSE current_stage 
