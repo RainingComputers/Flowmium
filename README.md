@@ -2,11 +2,67 @@
 
 # Flowmium
 
-Flowmium is a workflow orchestrator that uses kubernetes written in rust.
+Flowmium is a workflow orchestrator that uses kubernetes written in rust. You can define and run a YAML workflow of containers or you can run a python workflow where each function runs as a kubernetes pod.
 
-## Running the python flow example
+A python workflow would look like this
 
-Run the below commands to run an [example python flow](framework/test.py)
+```python
+from flowmium import Flow, FlowContext
+from flowmium.serializers import plain_text, json_text, pkl
+
+
+flow = Flow("testing")
+
+
+@flow.task(serializer=json_text)
+def foo() -> str:
+    return "Hallo world"
+
+
+@flow.task({"input_str": foo}, serializer=plain_text)
+def replace_letter_a(input_str: str, flowctx: FlowContext) -> str:
+    return input_str.replace("a", "e") + str(flowctx.task_id)
+
+
+@flow.task({"input_str": foo}, serializer=pkl)
+def replace_letter_t(input_str: str) -> str:
+    return input_str.replace("t", "d")
+
+
+@flow.task(
+    {"first": replace_letter_t, "second": replace_letter_a}, serializer=plain_text
+)
+def concat(first: str, second: str) -> str:
+    return f"{first} {second}"
+
+
+if __name__ == "__main__":
+    flow.run()
+
+```
+
+## Getting started
+
+-   [Deploying on local for testing](examples/deployment/README.md)
+-   [Deploying on production](examples/deployment/README.md#for-production)
+-   [Example python package workflow](examples/python_package_workflow/)
+-   [Example python script workflow](examples/python_script_workflow/)
+-   [Example YAML definition workflow](examples/yaml_flow_definition/)
+-   [API documentation](flowmium/apidoc.http)
+
+## Running from source
+
+### Running python flow example from source
+
+These instructions will allow you to run an example python flow (`framework/tests/example_flow.py`) all from local source without pulling from upstream (including the executor).
+Use this to validate your changes.
+Instructions assume you are at the root of the repo.
+
+-   Install sqlx CLI
+
+    ```
+    cargo install sqlx-cli
+    ```
 
 -   Run a test kubernetes cluster, minio and container registry in local
 
@@ -43,7 +99,15 @@ Run the below commands to run an [example python flow](framework/test.py)
     cargo run --bin flowmium -- server --port 8080
     ```
 
--   Build and push the example flow
+-   Watch flow status using `flowctl`
+
+    ```
+    cd flowmium/
+    cargo build
+    watch ./target/debug/flowctl list
+    ```
+
+-   Build and push the example flow (NOTE: You might want to use a different image name if you running the test for the second time or prune docker images on your machine)
 
     ```
     cd framework/
@@ -55,11 +119,9 @@ Run the below commands to run an [example python flow](framework/test.py)
 -   Submit the flow to the executor server
 
     ```
-    python3 test.py --image registry:5000/py-flow-test:latest --cmd python3 test.py --flowmium-server http://localhost:8080
+    python3 -m tests --image registry:5000/py-flow-test:latest --cmd 'python3 -m tests' --flowmium-server http://localhost:8080
     ```
 
-## TODO
+### Running unit tests for python framework
 
--   [ ] Workers
--   [ ] Handle unknown pod statuses
--   [ ] Publish to crates.io and PyPI
+Run `make test` from `framework/` path.

@@ -6,12 +6,16 @@
         "creds",
         "flowctl",
         "Flowmium",
+        "ipam",
+        "KUBECONFIG",
+        "minio",
         "proto",
         "sched",
         "serde",
         "sqlx",
         "thiserror",
         "tlsv",
+        "tmpfs",
         "tolerations",
         "tungstenite"
     ]

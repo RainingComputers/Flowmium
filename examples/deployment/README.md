@@ -31,7 +31,7 @@ You can deploy flowmium on your local machine for testing and for production
 -   Expose flowmium server
 
     ```
-    KUBECONFIG=./kubeconfig.yaml svc/flowmium-server-service 8080
+    KUBECONFIG=./kubeconfig.yaml kubectl port-forward  svc/flowmium-server-service 8080
     ```
 
 -   Watch for flows status
@@ -39,3 +39,7 @@ You can deploy flowmium on your local machine for testing and for production
     ```
     watch flowctl list
     ```
+
+## For production
+
+You can use `kubernetes.yaml` in this example folder for deploying flowmium but replace the postgres and minio deployments with other helm charts.

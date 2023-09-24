@@ -45,6 +45,18 @@ spec:
               value: "password"
             - name: FLOWMIUM_EXECUTOR_IMAGE
               value: "registry:5000/flowmium-debug"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - >
+                  curl --fail-with-body \
+                    --header "Content-Type: application/json" \
+                    --request GET \
+                    http://127.0.0.1:8000/api/v1/job
+            initialDelaySeconds: 10
+            periodSeconds: 900
 ---
 apiVersion: v1
 kind: Service
