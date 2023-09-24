@@ -107,7 +107,7 @@ Instructions assume you are at the root of the repo.
     watch ./target/debug/flowctl list
     ```
 
--   Build and push the example flow (NOTE: You might want to use a different image name if you running the test for the second time or prune docker images on your machine)
+-   Build and push the example python flow (NOTE: You might want to use a different image name if you running the test for the second time or prune docker images on your machine)
 
     ```
     cd framework/
