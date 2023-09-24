@@ -43,13 +43,31 @@ if __name__ == "__main__":
 
 ## Getting started
 
--   [Deploying on local for testing](examples/deployment/)
+-   [Setting up on local for testing](examples/deployment/)
 -   [Deploying on production](examples/deployment/README.md#for-production)
 -   [Example python package workflow](examples/python_package_workflow/)
 -   [Example python script workflow](examples/python_script_workflow/)
 -   [Example YAML definition workflow](examples/yaml_flow_definition/)
 -   [Python framework documentation](http://flowmium.readthedocs.io/)
 -   [API documentation](flowmium/apidoc.http)
+
+## `flowctl` CLI
+
+The `flowctl` CLI is used to monitor current status of workflows, submit new workflows and download artifacts.
+
+| Action              |
+| ------------------- | ----------------------------------------------------------- |
+| List workflows      | `flowctl list`                                              |
+| Use explicit URL    | `flowctl --url http://localhost:8080 list`                  |
+| Submit a YAML flow  | `flowctl submit flow.yaml`                                  |
+| Download artefact   | `flowctl download <flow-id> <output-name> <local-dir-path>` |
+| Subscribe to events | `flowctl subscribe`                                         |
+| Describe a flow     | `flowctl describe <id>`                                     |
+| Create secrets      | `flowctl secret create <key> <value>`                       |
+| Update secret       | `flowctl secret update <key> <value>`                       |
+| Delete secret       | `flowctl secret delete <key>`                               |
+
+NOTE: Secrets are stored in the server and can be referred to set environment variable values in YAML definition or the Python workflows. This is so you don't have to commit secrets to your repository. They don't however use Kubernetes secrets, they are set as normal environment variables when workflow tasks are deployed as a Job.
 
 ## Running from source
 
