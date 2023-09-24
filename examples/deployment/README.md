@@ -42,7 +42,7 @@ You can deploy flowmium on your local machine for testing and for production
 
 ## For production
 
-You can use `kubernetes.yaml` in this example folder for deploying flowmium **but replace the postgres and minio deployments with other helm charts**. You may also want to configure the server by setting following environment variables
+You can use `kubernetes.yaml` in this example folder for deploying flowmium **but replace the postgres and minio deployments with other helm charts**. Flowmium is also not designed to be run as multiple instances or replicas. You may also want to configure the server by setting following environment variables
 
 | Name                    | Description                                                                  | Example                                           |
 | ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------- |
