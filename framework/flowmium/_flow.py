@@ -181,7 +181,7 @@ class Flow:
                 executed) are packaged into a docker image and uploaded to registry that is
                 accessible to the kubernetes cluster that the executor is running in.
                 This argument is the name of the uploaded image,
-                example :code:`localhost:5000/py-flow-test:latest`.
+                example :code:`localhost:5180/py-flow-test:latest`.
 
             cmd: This command to execute the module or package which inturn will run
                 :code:`flow.run()`. For example :code:`['python3' 'test.py']`.

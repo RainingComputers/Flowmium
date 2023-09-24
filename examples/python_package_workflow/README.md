@@ -6,8 +6,8 @@
 
     ```
     docker build . -t python-package-workflow-test
-    docker tag python-package-workflow-test localhost:5000/python-package-workflow-test:latest
-    docker push localhost:5000/python-package-workflow-test:latest
+    docker tag python-package-workflow-test localhost:5180/python-package-workflow-test:latest
+    docker push localhost:5180/python-package-workflow-test:latest
     ```
 
 -   Submit flow to executor (NOTE: Add `--dry-run` to see YAML definition without submitting the flow)

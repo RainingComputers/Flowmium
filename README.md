@@ -132,8 +132,8 @@ Instructions assume you are at the root of the repo.
     ```
     cd framework/
     docker build . -t py-flow-test
-    docker tag py-flow-test localhost:5000/py-flow-test:latest
-    docker push localhost:5000/py-flow-test:latest
+    docker tag py-flow-test localhost:5180/py-flow-test:latest
+    docker push localhost:5180/py-flow-test:latest
     ```
 
 -   Submit the flow to the executor server
