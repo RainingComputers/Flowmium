@@ -42,4 +42,15 @@ You can deploy flowmium on your local machine for testing and for production
 
 ## For production
 
-You can use `kubernetes.yaml` in this example folder for deploying flowmium but replace the postgres and minio deployments with other helm charts.
+You can use `kubernetes.yaml` in this example folder for deploying flowmium but replace the postgres and minio deployments with other helm charts. You may also want to configure the server by setting following environment variables
+
+| Name                    | Description                                                                  | Example                                           |
+| ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------- |
+| FLOWMIUM_POSTGRES_URL   | URL to postgres database                                                     | `postgres://flowmium:flowmium@localhost/flowmium` |
+| FLOWMIUM_STORE_URL      | URL to s3 compatible storage like MinIO                                      | `http://172.16.238.4:9000`                        |
+| FLOWMIUM_BUCKET_NAME    | Name of the bucket to store artefact in                                      | `flowmium-test`                                   |
+| FLOWMIUM_ACCESS_KEY     | Access key for s3                                                            | `minio`                                           |
+| FLOWMIUM_SECRET_KEY     | Secret key for s3                                                            | `password`                                        |
+| FLOWMIUM_EXECUTOR_IMAGE | Image to use for the init container                                          | `registry:5000/flowmium-debug`                    |
+| FLOWMIUM_NAMESPACE      | Namespace to spawn or deploy jobs in                                         | `default`                                         |
+| KUBECONFIG              | Path to kubeconfig, not required if a kubernetes service account is attached | `./kubeconfig.yaml`                               |
