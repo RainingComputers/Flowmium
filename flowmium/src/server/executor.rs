@@ -447,7 +447,9 @@ mod tests {
             bucket_name: "flowmium-test".to_owned(),
             access_key: "minio".to_owned(),
             secret_key: "password".to_owned(),
-            executor_image: "registry:5000/flowmium-debug".to_owned(),
+            executor_image: option_env!("FLOWMIUM_EXECUTOR_IMAGE")
+                .unwrap_or("registry:5000/flowmium-debug")
+                .to_owned(),
             namespace: "default".to_owned(),
             flow_id_label: default_flow_label(),
             task_id_label: default_task_label(),

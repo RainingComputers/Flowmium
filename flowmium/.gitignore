@@ -1,4 +1,5 @@
 /target
+/build
 kubeconfig.yaml
 test.db
 notes.txt

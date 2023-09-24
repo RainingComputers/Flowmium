@@ -17,7 +17,7 @@ spec:
       serviceAccountName: flowmium-server-sa
       containers:
         - name: flowmium-server
-          image: "registry:5000/flowmium-debug"
+          image: "docker.io/shnoo28/flowmium:latest"
           command:
             - /flowmium
             - server
@@ -44,7 +44,7 @@ spec:
             - name: FLOWMIUM_SECRET_KEY
               value: "password"
             - name: FLOWMIUM_EXECUTOR_IMAGE
-              value: "registry:5000/flowmium-debug"
+              value: "docker.io/shnoo28/flowmium:latest"
             - name: FLOWMIUM_NAMESPACE
               value: "default"
           livenessProbe:

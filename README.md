@@ -113,7 +113,7 @@ Instructions assume you are at the root of the repo.
     export FLOWMIUM_BUCKET_NAME='flowmium-test'
     export FLOWMIUM_ACCESS_KEY='minio'
     export FLOWMIUM_SECRET_KEY='password'
-    export FLOWMIUM_EXECUTOR_IMAGE='registry:5000/flowmium-debug'
+    export FLOWMIUM_EXECUTOR_IMAGE='docker.io/shnoo28/flowmium:latest'
     export FLOWMIUM_NAMESPACE=default
     export KUBECONFIG=./kubeconfig.yaml
     cargo run --bin flowmium -- server --port 8080

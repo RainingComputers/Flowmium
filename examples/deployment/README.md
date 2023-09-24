@@ -7,7 +7,7 @@ You can deploy flowmium on your local machine for testing and for production
 -   Install flowctl
 
     ```
-    cargo install flowmium  # TODO: confirm this
+    cargo install flowmium
     ```
 
 -   Run a registry and kubernetes on your machine as docker containers
@@ -51,6 +51,6 @@ You can use [`kubernetes.yaml`](kubernetes.yaml) in this example folder for depl
 | FLOWMIUM_BUCKET_NAME    | Name of the bucket to store artefact in                                      | `flowmium-test`                                   |
 | FLOWMIUM_ACCESS_KEY     | Access key for s3                                                            | `minio`                                           |
 | FLOWMIUM_SECRET_KEY     | Secret key for s3                                                            | `password`                                        |
-| FLOWMIUM_EXECUTOR_IMAGE | Image to use for the init container                                          | `registry:5000/flowmium-debug`                    |
+| FLOWMIUM_EXECUTOR_IMAGE | Image to use for the init container                                          | `docker.io/shnoo28/flowmium:latest`               |
 | FLOWMIUM_NAMESPACE      | Namespace to spawn or deploy jobs in                                         | `default`                                         |
 | KUBECONFIG              | Path to kubeconfig, not required if a kubernetes service account is attached | `./kubeconfig.yaml`                               |
