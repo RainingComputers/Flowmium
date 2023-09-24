@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
 ## Getting started
 
--   [Deploying on local for testing](examples/deployment/README.md)
+-   [Deploying on local for testing](examples/deployment/)
 -   [Deploying on production](examples/deployment/README.md#for-production)
 -   [Example python package workflow](examples/python_package_workflow/)
 -   [Example python script workflow](examples/python_script_workflow/)
