@@ -14,7 +14,7 @@ use std::{process::ExitCode, time::Duration};
 use crate::server::{
     api::start_server,
     args,
-    executor::{schedule_and_run_tasks, ExecutorConfig, TaskPodConfig},
+    executor::{schedule_and_run_tasks, ExecutorConfig},
     scheduler::Scheduler,
 };
 
@@ -34,7 +34,7 @@ pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
 }
 
 pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
-    let config: TaskPodConfig = match envy::prefixed("FLOWMIUM_").from_env() {
+    let executor_config: ExecutorConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%error, "Invalid env config for executor");
@@ -42,21 +42,17 @@ pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
         }
     };
 
-    let executor_config = ExecutorConfig::new_with_default_labels(config);
-
     Some(executor_config)
 }
 
 async fn get_bucket_from_executor_config(
     executor_config: &ExecutorConfig,
 ) -> Result<Bucket, ArtefactError> {
-    let pod_config = &executor_config.pod_config;
-
     get_bucket(
-        &pod_config.access_key,
-        &pod_config.secret_key,
-        &pod_config.bucket_name,
-        pod_config.store_url.clone(),
+        &executor_config.access_key,
+        &executor_config.secret_key,
+        &executor_config.bucket_name,
+        executor_config.store_url.clone(),
     )
     .await
 }

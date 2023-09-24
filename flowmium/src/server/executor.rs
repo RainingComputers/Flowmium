@@ -61,32 +61,26 @@ enum TaskStatus {
     Failed,
 }
 
+fn default_flow_label() -> String {
+    "flowmium.io/flow-id".to_owned()
+}
+
+fn default_task_label() -> String {
+    "flowmium.io/task-id".to_owned()
+}
+
 #[derive(Debug, PartialEq, Deserialize, Clone)]
-pub struct TaskPodConfig {
+pub struct ExecutorConfig {
     pub store_url: String,
     pub bucket_name: String,
     pub access_key: String,
     pub secret_key: String,
     pub executor_image: String,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct ExecutorConfig {
     pub namespace: String,
+    #[serde(default = "default_flow_label")]
     pub flow_id_label: String,
+    #[serde(default = "default_task_label")]
     pub task_id_label: String,
-    pub pod_config: TaskPodConfig,
-}
-
-impl ExecutorConfig {
-    pub fn new_with_default_labels(task_pod_config: TaskPodConfig) -> ExecutorConfig {
-        ExecutorConfig {
-            namespace: "default".to_owned(),
-            flow_id_label: "flowmium.io/flow-id".to_owned(),
-            task_id_label: "flowmium.io/task-id".to_owned(),
-            pod_config: task_pod_config,
-        }
-    }
 }
 
 async fn get_kubernetes_client() -> Result<Client, ExecutorError> {
@@ -143,19 +137,19 @@ async fn get_task_envs<'a>(
         }),
         serde_json::json!( {
             "name": "FLOWMIUM_ACCESS_KEY",
-            "value": config.pod_config.access_key,
+            "value": config.access_key,
         }),
         serde_json::json!( {
             "name": "FLOWMIUM_SECRET_KEY",
-            "value": config.pod_config.secret_key,
+            "value": config.secret_key,
         }),
         serde_json::json!( {
             "name": "FLOWMIUM_BUCKET_NAME",
-            "value": config.pod_config.bucket_name,
+            "value": config.bucket_name,
         }),
         serde_json::json!( {
             "name": "FLOWMIUM_STORE_URL",
-            "value": config.pod_config.store_url,
+            "value": config.store_url,
         }),
     ];
 
@@ -167,7 +161,7 @@ async fn get_task_envs<'a>(
     Ok(task_envs)
 }
 
-#[tracing::instrument(skip(config, secrets))]
+#[tracing::instrument(skip(task, config, secrets))]
 async fn spawn_task(
     flow_id: i32,
     task_id: i32,
@@ -179,7 +173,7 @@ async fn spawn_task(
 
     let client = get_kubernetes_client().await?;
 
-    let jobs: Api<Job> = Api::default_namespaced(client);
+    let jobs: Api<Job> = Api::namespaced(client, &config.namespace);
 
     let input_json = match serde_json::to_string(&task.inputs) {
         Ok(string) => string,
@@ -216,7 +210,7 @@ async fn spawn_task(
                     "initContainers": [
                         {
                             "name": "init",
-                            "image": &config.pod_config.executor_image,
+                            "image": &config.executor_image,
                             "command": ["/flowmium", "init", "/flowmium", "/var/run/flowmium"],
                             "volumeMounts": [
                                 {
@@ -447,13 +441,16 @@ mod tests {
 
     use super::*;
 
-    fn test_pod_config() -> TaskPodConfig {
-        TaskPodConfig {
+    fn test_executor_config() -> ExecutorConfig {
+        ExecutorConfig {
             store_url: "http://172.16.238.4:9000".to_owned(),
             bucket_name: "flowmium-test".to_owned(),
             access_key: "minio".to_owned(),
             secret_key: "password".to_owned(),
             executor_image: "registry:5000/flowmium-debug".to_owned(),
+            namespace: "default".to_owned(),
+            flow_id_label: default_flow_label(),
+            task_id_label: default_task_label(),
         }
     }
 
@@ -470,10 +467,10 @@ mod tests {
 
     async fn delete_all_objects(config: &ExecutorConfig) -> Bucket {
         let bucket = get_bucket(
-            &config.pod_config.access_key,
-            &config.pod_config.secret_key,
-            &config.pod_config.bucket_name,
-            config.pod_config.store_url.clone(),
+            &config.access_key,
+            &config.secret_key,
+            &config.bucket_name,
+            config.store_url.clone(),
         )
         .await
         .unwrap();
@@ -642,7 +639,7 @@ mod tests {
     #[serial]
     async fn test_schedule_and_run_tasks() {
         let pool = get_test_pool(&["flows", "secrets"]).await;
-        let config = ExecutorConfig::new_with_default_labels(test_pod_config());
+        let config = test_executor_config();
 
         let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud::new(pool.clone());
@@ -737,7 +734,7 @@ mod tests {
         delete_all_jobs().await;
 
         let pool = get_test_pool(&["flows", "secrets"]).await;
-        let config = ExecutorConfig::new_with_default_labels(test_pod_config());
+        let config = test_executor_config();
 
         let sched = Scheduler::new(pool.clone());
         let secrets = SecretsCrud::new(pool.clone());

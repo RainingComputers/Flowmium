@@ -8,8 +8,14 @@
     docker push localhost:5000/python-package-workflow-test:latest
     ```
 
--   Submit flow to executor
+-   Submit flow to executor (NOTE: Add `--dry-run` to see YAML definition without submitting the flow)
 
     ```
     python3 -m my_flow --image registry:5000/python-package-workflow-test:latest --cmd 'python3 -m my_flow' --flowmium-server http://localhost:8080
+    ```
+
+-   Download output artefact
+
+    ```
+    flowctl download <flow-id> concat-output.txt .
     ```

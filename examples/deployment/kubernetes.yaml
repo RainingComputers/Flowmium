@@ -45,6 +45,8 @@ spec:
               value: "password"
             - name: FLOWMIUM_EXECUTOR_IMAGE
               value: "registry:5000/flowmium-debug"
+            - name: FLOWMIUM_NAMESPACE
+              value: "default"
           livenessProbe:
             exec:
               command:
