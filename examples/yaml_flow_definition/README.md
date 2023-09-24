@@ -1,7 +1,9 @@
 # Getting started with YAML definition flows
 
-- Submit to server using `flowctl` 
+-   Deploy flowmium on local by following these [steps](../deployment/)
 
-  ```
-  flowctl --url http://localhost:8080 submit my_flow.yaml
-  ```
+-   Submit to server using `flowctl`
+
+    ```
+    flowctl --url http://localhost:8080 submit my_flow.yaml
+    ```

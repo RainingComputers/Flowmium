@@ -1,5 +1,7 @@
 # Getting started with python module workflow
 
+-   Deploy flowmium on local be following these [steps](../deployment/)
+
 -   Build python flow and push it to the registry (NOTE: It is recommended to change version with each build instead of latest)
 
     ```
