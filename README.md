@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
 The `flowctl` CLI is used to monitor current status of workflows, submit new workflows and download artifacts.
 
-| Action              |
+| Action              | Command                                                     |
 | ------------------- | ----------------------------------------------------------- |
 | List workflows      | `flowctl list`                                              |
 | Use explicit URL    | `flowctl --url http://localhost:8080 list`                  |
