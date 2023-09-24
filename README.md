@@ -48,6 +48,7 @@ if __name__ == "__main__":
 -   [Example python package workflow](examples/python_package_workflow/)
 -   [Example python script workflow](examples/python_script_workflow/)
 -   [Example YAML definition workflow](examples/yaml_flow_definition/)
+-   [Python framework documentation](http://flowmium.readthedocs.io/)
 -   [API documentation](flowmium/apidoc.http)
 
 ## Running from source
