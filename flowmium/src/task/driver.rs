@@ -67,7 +67,7 @@ fn get_command(cmd: Vec<String>) -> Option<Command> {
     Some(command)
 }
 
-#[tracing::instrument(skip(config))]
+#[tracing::instrument(skip(config, cmd))]
 pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
     let option_inputs: Option<Vec<Input>> = match serde_json::from_str(&config.input_json) {
         Ok(inputs) => inputs,
@@ -90,7 +90,9 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
         &config.secret_key,
         &config.bucket_name,
         config.store_url,
-    ) else {
+    )
+    .await
+    else {
         return ExitCode::FAILURE;
     };
 

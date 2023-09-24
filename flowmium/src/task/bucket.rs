@@ -1,8 +1,25 @@
-use s3::{creds::Credentials, request_trait::ResponseData, Bucket, Region};
+use s3::{creds::Credentials, request_trait::ResponseData, Bucket, BucketConfiguration, Region};
 
 use super::errors::ArtefactError;
 
-pub fn get_bucket(
+pub async fn bucket_exists(bucket: &Bucket) -> Result<bool, ArtefactError> {
+    match bucket
+        .list_page("/".to_string(), None, None, None, None)
+        .await
+    {
+        Ok(_) => Ok(true),
+        Err(error) => match error {
+            s3::error::S3Error::Http(404, _) => Ok(false),
+            _ => {
+                tracing::error!(%error, "Unable to check if bucket exists");
+                Err(ArtefactError::UnableToCheckExistence(error))
+            }
+        },
+    }
+}
+
+#[tracing::instrument(skip(access_key, secret_key))]
+pub async fn get_bucket(
     access_key: &str,
     secret_key: &str,
     bucket_name: &str,
@@ -13,7 +30,7 @@ pub fn get_bucket(
         Ok(creds) => creds,
         Err(error) => {
             tracing::error!(%error, "Unable to create creds for bucket");
-            return Err(ArtefactError::UnableToOpenBucket(
+            return Err(ArtefactError::UnableToExistingOpenBucket(
                 s3::error::S3Error::Credentials(error),
             ));
         }
@@ -24,15 +41,48 @@ pub fn get_bucket(
         endpoint: store_url,
     };
 
-    let bucket = match Bucket::new(bucket_name, bucket_region, bucket_creds) {
+    let bucket = match Bucket::new(bucket_name, bucket_region.clone(), bucket_creds.clone()) {
         Ok(bucket) => bucket.with_path_style(),
         Err(error) => {
             tracing::error!(%error, "Unable to open bucket");
-            return Err(ArtefactError::UnableToOpenBucket(error));
+            return Err(ArtefactError::UnableToExistingOpenBucket(error));
         }
     };
 
-    Ok(bucket)
+    match bucket_exists(&bucket).await? {
+        true => {
+            tracing::info!("Using existing bucket");
+            Ok(bucket)
+        }
+        false => match Bucket::create_with_path_style(
+            bucket_name,
+            bucket_region,
+            bucket_creds,
+            BucketConfiguration::public(),
+        )
+        .await
+        {
+            Ok(response) => match response.success() {
+                true => {
+                    tracing::info!("Created a new bucket");
+                    Ok(response.bucket)
+                }
+                false => {
+                    tracing::error!(
+                        "Unable to create bucket, got failure response {}",
+                        response.response_text
+                    );
+                    Err(ArtefactError::UnableToCreateBucketFailResponse(
+                        response.response_text,
+                    ))
+                }
+            },
+            Err(error) => {
+                tracing::error!(%error, "Unable to create bucket");
+                Err(ArtefactError::UnableToCreateBucket(error))
+            }
+        },
+    }
 }
 
 pub async fn create_parent_directories(local_path: &String) -> tokio::io::Result<()> {

@@ -6,7 +6,7 @@ pub struct PostgresConfig {
     postgres_url: String,
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(config))]
 pub async fn init_db_and_get_pool(config: PostgresConfig) -> Option<Pool<Postgres>> {
     let pool = match PgPoolOptions::new()
         .max_connections(5)

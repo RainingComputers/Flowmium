@@ -475,6 +475,7 @@ mod tests {
             &config.pod_config.bucket_name,
             config.pod_config.store_url.clone(),
         )
+        .await
         .unwrap();
 
         let object_list = bucket

@@ -38,7 +38,7 @@ services:
       - MINIO_SECRET_KEY=password
     ports:
       - 9000:9000
-      - 9001:9001    
+      - 9001:9001
   postgres:
     image: postgres:latest
     restart: always
@@ -48,22 +48,7 @@ services:
       - POSTGRES_PASSWORD=flowmium
       - POSTGRES_DB=flowmium
     ports:
-      - '5432:5432'
-  buckets:
-    networks:
-     testnet:
-       ipv4_address: 172.16.238.5
-    image: minio/mc
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc config host add testminio http://minio:9000 minio password;
-      /usr/bin/mc rm -r --force testminio/flowmium-test;
-      /usr/bin/mc mb testminio/flowmium-test;
-      /usr/bin/mc policy download testminio/flowmium-test;
-      exit 0;
-      "
+      - "5432:5432"
 networks:
   testnet:
     ipam:

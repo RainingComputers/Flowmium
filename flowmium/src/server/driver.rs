@@ -1,4 +1,5 @@
 use crate::{
+    retry::with_exp_backoff_retry,
     server::secrets::SecretsCrud,
     task::{
         bucket::get_bucket,
@@ -29,12 +30,7 @@ pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
         }
     };
 
-    let Some(pool) = init_db_and_get_pool(database_config).await else {
-        tracing::error!("Unable to initialize database");
-        return None;
-    };
-
-    Some(pool)
+    init_db_and_get_pool(database_config).await
 }
 
 pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
@@ -51,7 +47,7 @@ pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
     Some(executor_config)
 }
 
-fn get_bucket_from_executor_config(
+async fn get_bucket_from_executor_config(
     executor_config: &ExecutorConfig,
 ) -> Result<Bucket, ArtefactError> {
     let pod_config = &executor_config.pod_config;
@@ -62,6 +58,7 @@ fn get_bucket_from_executor_config(
         &pod_config.bucket_name,
         pod_config.store_url.clone(),
     )
+    .await
 }
 
 pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &ExecutorConfig) {
@@ -81,7 +78,7 @@ pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config:
     });
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(pool, sched, executor_config))]
 pub async fn run_server(
     pool: &Pool<Postgres>,
     sched: &Scheduler,
@@ -90,7 +87,13 @@ pub async fn run_server(
 ) -> ExitCode {
     tracing::info!("Starting API server");
 
-    let Ok(bucket) = get_bucket_from_executor_config(executor_config) else {
+    let Some(bucket) = with_exp_backoff_retry(
+        || async { get_bucket_from_executor_config(executor_config).await.ok() },
+        "Unable to create or open bucket",
+        8,
+    )
+    .await
+    else {
         return ExitCode::FAILURE;
     };
 
@@ -103,7 +106,13 @@ pub async fn run_server(
 }
 
 async fn server_main(port: u16) -> ExitCode {
-    let Some(pool) = get_default_postgres_pool().await else {
+    let Some(pool) = with_exp_backoff_retry(
+        get_default_postgres_pool,
+        "Unable to connect to database",
+        8,
+    )
+    .await
+    else {
         return ExitCode::FAILURE;
     };
 
@@ -137,6 +146,8 @@ async fn init_main(src: String, dest: String) -> ExitCode {
         tracing::error!(%error, "Unable to copy flowmium executable");
         return ExitCode::FAILURE;
     }
+
+    tracing::info!("Copied flowmium executable into volume successfully");
 
     ExitCode::SUCCESS
 }

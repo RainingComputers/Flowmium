@@ -12,8 +12,14 @@ pub enum ArtefactError {
     UnableToDownloadInputApi(u16),
     #[error("unable to write input: {0}")]
     UnableToWriteInput(std::io::Error),
+    #[error("unable to check for existence of bucket: {0}")]
+    UnableToCheckExistence(s3::error::S3Error),
+    #[error("unable to create bucket: {0}")]
+    UnableToCreateBucket(s3::error::S3Error),
+    #[error("unable to create bucket response was not ok: {0}")]
+    UnableToCreateBucketFailResponse(String),
     #[error("unable to open bucket: {0}")]
-    UnableToOpenBucket(s3::error::S3Error),
+    UnableToExistingOpenBucket(s3::error::S3Error),
     #[error("unable to upload output api errored with status {0}")]
     UnableToUploadArtifactApi(u16),
     #[error("artefact {0} does not exist")]
