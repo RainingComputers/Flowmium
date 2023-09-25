@@ -10,6 +10,12 @@
     docker push localhost:5180/python-package-workflow-test:latest
     ```
 
+-   Install flowmium
+
+    ```
+    python3 -m pip install flowmium
+    ```
+
 -   Submit flow to executor (NOTE: Add `--dry-run` to see YAML definition without submitting the flow)
 
     ```
