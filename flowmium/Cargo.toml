@@ -13,6 +13,7 @@ keywords = ["kubernetes"]
 categories = ["algorithms"]
 include = [
     "**/*.rs",
+    "migrations/*.sql"
     "Cargo.toml",
 ]
 
