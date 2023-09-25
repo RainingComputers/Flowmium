@@ -40,9 +40,6 @@ jobs:
       - name: Run migrations on test database
         run: sqlx migrate run
         working-directory: flowmium
-      - name: Run cargo check
-        run: cargo check
-        working-directory: flowmium
       - name: Run clippy
         run: cargo clippy
         working-directory: flowmium
