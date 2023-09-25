@@ -18,6 +18,43 @@ pub async fn bucket_exists(bucket: &Bucket) -> Result<bool, ArtefactError> {
     }
 }
 
+pub async fn create_if_does_not_exist(bucket: Bucket) -> Result<Bucket, ArtefactError> {
+    match bucket_exists(&bucket).await? {
+        true => {
+            tracing::info!("Using existing bucket");
+            Ok(bucket)
+        }
+        false => match Bucket::create_with_path_style(
+            &bucket.name,
+            bucket.region,
+            bucket.credentials,
+            BucketConfiguration::public(),
+        )
+        .await
+        {
+            Ok(response) => match response.success() {
+                true => {
+                    tracing::info!("Created a new bucket");
+                    Ok(response.bucket)
+                }
+                false => {
+                    tracing::error!(
+                        "Unable to create bucket, got failure response {}",
+                        response.response_text
+                    );
+                    Err(ArtefactError::UnableToCreateBucketFailResponse(
+                        response.response_text,
+                    ))
+                }
+            },
+            Err(error) => {
+                tracing::error!(%error, "Unable to create bucket");
+                Err(ArtefactError::UnableToCreateBucket(error))
+            }
+        },
+    }
+}
+
 #[tracing::instrument(skip(access_key, secret_key))]
 pub async fn get_bucket(
     access_key: &str,
@@ -49,40 +86,7 @@ pub async fn get_bucket(
         }
     };
 
-    match bucket_exists(&bucket).await? {
-        true => {
-            tracing::info!("Using existing bucket");
-            Ok(bucket)
-        }
-        false => match Bucket::create_with_path_style(
-            bucket_name,
-            bucket_region,
-            bucket_creds,
-            BucketConfiguration::public(),
-        )
-        .await
-        {
-            Ok(response) => match response.success() {
-                true => {
-                    tracing::info!("Created a new bucket");
-                    Ok(response.bucket)
-                }
-                false => {
-                    tracing::error!(
-                        "Unable to create bucket, got failure response {}",
-                        response.response_text
-                    );
-                    Err(ArtefactError::UnableToCreateBucketFailResponse(
-                        response.response_text,
-                    ))
-                }
-            },
-            Err(error) => {
-                tracing::error!(%error, "Unable to create bucket");
-                Err(ArtefactError::UnableToCreateBucket(error))
-            }
-        },
-    }
+    create_if_does_not_exist(bucket).await
 }
 
 pub async fn create_parent_directories(local_path: &String) -> tokio::io::Result<()> {

@@ -97,11 +97,11 @@ Instructions assume you are at the root of the repo.
     make watch
     ```
 
--   Run tests (this is required)
+-   Run migrations
 
     ```
     cd flowmium/
-    make test
+    sqlx migrate run
     ```
 
 -   Run the flowmium server from root of this repo
@@ -140,6 +140,20 @@ Instructions assume you are at the root of the repo.
 
     ```
     python3 -m tests --image registry:5000/py-flow-test:latest --cmd 'python3 -m tests' --flowmium-server http://localhost:8080
+    ```
+
+### Running e2e tests
+
+-   For running e2e tests with init container from upstream
+
+    ```
+    make test
+    ```
+
+-   For running e2e tests with init container from source
+
+    ```
+    FLOWMIUM_EXECUTOR_IMAGE_FROM_SOURCE=true make test
     ```
 
 ### Running unit tests for python framework
