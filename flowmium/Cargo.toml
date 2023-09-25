@@ -47,4 +47,4 @@ getset = "0.1.2"
 
 
 [dev-dependencies]
-serial_test = "*"
+serial_test = "1.0.0"
