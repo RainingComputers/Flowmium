@@ -37,13 +37,15 @@ spec:
               value: "postgres://flowmium:flowmium@flowmium-postgres-service.default.svc.cluster.local/flowmium"
             - name: FLOWMIUM_STORE_URL
               value: "http://flowmium-minio-service.default.svc.cluster.local:9000"
+            - name: FLOWMIUM_TASK_STORE_URL
+              value: "http://flowmium-minio-service.default.svc.cluster.local:9000"
             - name: FLOWMIUM_BUCKET_NAME
               value: "flowmium-test"
             - name: FLOWMIUM_ACCESS_KEY
               value: "minio"
             - name: FLOWMIUM_SECRET_KEY
               value: "password"
-            - name: FLOWMIUM_EXECUTOR_IMAGE
+            - name: FLOWMIUM_INIT_CONTAINER_IMAGE
               value: "docker.io/shnoo28/flowmium:latest"
             - name: FLOWMIUM_NAMESPACE
               value: "default"

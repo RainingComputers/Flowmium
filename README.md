@@ -109,11 +109,12 @@ Instructions assume you are at the root of the repo.
     ```
     cd flowmium/
     export FLOWMIUM_POSTGRES_URL='postgres://flowmium:flowmium@localhost/flowmium'
-    export FLOWMIUM_STORE_URL='http://172.16.238.4:9000'
+    export FLOWMIUM_STORE_URL='http://localhost:9000'
+    export FLOWMIUM_TASK_STORE_URL='http://172.16.238.4:9000'
     export FLOWMIUM_BUCKET_NAME='flowmium-test'
     export FLOWMIUM_ACCESS_KEY='minio'
     export FLOWMIUM_SECRET_KEY='password'
-    export FLOWMIUM_EXECUTOR_IMAGE='docker.io/shnoo28/flowmium:latest'
+    export FLOWMIUM_INIT_CONTAINER_IMAGE='docker.io/shnoo28/flowmium:latest'
     export FLOWMIUM_NAMESPACE=default
     export KUBECONFIG=./kubeconfig.yaml
     cargo run --bin flowmium -- server --port 8080
@@ -153,7 +154,7 @@ Instructions assume you are at the root of the repo.
 -   For running e2e tests with init container from source
 
     ```
-    FLOWMIUM_EXECUTOR_IMAGE_FROM_SOURCE=true make test
+    FLOWMIUM_INIT_CONTAINER_IMAGE_FROM_SOURCE=true make test
     ```
 
 ### Running unit tests for python framework

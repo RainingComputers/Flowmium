@@ -72,10 +72,11 @@ fn default_task_label() -> String {
 #[derive(Debug, PartialEq, Deserialize, Clone)]
 pub struct ExecutorConfig {
     pub store_url: String,
+    pub task_store_url: String,
     pub bucket_name: String,
     pub access_key: String,
     pub secret_key: String,
-    pub executor_image: String,
+    pub init_container_image: String,
     pub namespace: String,
     #[serde(default = "default_flow_label")]
     pub flow_id_label: String,
@@ -148,8 +149,8 @@ async fn get_task_envs<'a>(
             "value": config.bucket_name,
         }),
         serde_json::json!( {
-            "name": "FLOWMIUM_STORE_URL",
-            "value": config.store_url,
+            "name": "FLOWMIUM_TASK_STORE_URL",
+            "value": config.task_store_url,
         }),
     ];
 
@@ -210,7 +211,7 @@ async fn spawn_task(
                     "initContainers": [
                         {
                             "name": "init",
-                            "image": &config.executor_image,
+                            "image": &config.init_container_image,
                             "command": ["/flowmium", "init", "/flowmium", "/var/run/flowmium"],
                             "volumeMounts": [
                                 {
@@ -443,11 +444,12 @@ mod tests {
 
     fn test_executor_config() -> ExecutorConfig {
         ExecutorConfig {
-            store_url: "http://172.16.238.4:9000".to_owned(),
+            store_url: "http://localhost:9000".to_owned(),
+            task_store_url: "http://172.16.238.4:9000".to_owned(),
             bucket_name: "flowmium-test".to_owned(),
             access_key: "minio".to_owned(),
             secret_key: "password".to_owned(),
-            executor_image: "registry:5000/flowmium-debug".to_owned(),
+            init_container_image: "registry:5000/flowmium-debug".to_owned(),
             namespace: "default".to_owned(),
             flow_id_label: default_flow_label(),
             task_id_label: default_task_label(),

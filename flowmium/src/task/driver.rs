@@ -47,7 +47,7 @@ pub struct SidecarConfig {
     access_key: String,
     secret_key: String,
     bucket_name: String,
-    store_url: String,
+    task_store_url: String,
 }
 
 fn get_command(cmd: Vec<String>) -> Option<Command> {
@@ -89,7 +89,7 @@ pub async fn run_task(config: SidecarConfig, cmd: Vec<String>) -> ExitCode {
         &config.access_key,
         &config.secret_key,
         &config.bucket_name,
-        config.store_url,
+        config.task_store_url,
     )
     .await
     else {
