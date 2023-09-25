@@ -17,6 +17,17 @@ include = [
     "Cargo.toml",
 ]
 
+[lib]
+name = "flowmium"
+path = "src/lib.rs"
+
+[[bin]]
+name = "flowctl"
+path = "src/bin/flowctl.rs"
+
+[[bin]]
+name = "flowmium"
+path = "src/bin/flowmium.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
