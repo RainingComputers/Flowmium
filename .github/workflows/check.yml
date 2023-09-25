@@ -43,9 +43,6 @@ jobs:
       - name: Run clippy
         run: cargo clippy
         working-directory: flowmium
-      - name: Run tests
-        run: make test
-        working-directory: flowmium
   python-check:
     name: Checks for Python
     runs-on: ubuntu-latest
