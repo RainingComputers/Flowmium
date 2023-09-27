@@ -190,7 +190,7 @@ impl Scheduler {
     pub async fn list_flows(&self) -> Result<Vec<FlowListRecord>, SchedulerError> {
         let query = r#"
         SELECT 
-            id, flow_name, status AS "status: FlowStatus", 
+            id, flow_name, status, 
             array_length(running_tasks, 1) AS num_running, 
             array_length(finished_tasks, 1) AS num_finished, 
             array_length(failed_tasks, 1) AS num_failed,
@@ -212,15 +212,18 @@ impl Scheduler {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_terminated_flows(
+    pub async fn list_terminated_flows(
         &self,
         offset: i64,
         limit: i64,
-    ) -> Result<Vec<FlowRecord>, SchedulerError> {
+    ) -> Result<Vec<FlowListRecord>, SchedulerError> {
         let query = r#"
         SELECT 
-            id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks, 
-            task_definitions, flow_name, status AS "status: FlowStatus"
+            id, flow_name, status, 
+            array_length(running_tasks, 1) AS num_running, 
+            array_length(finished_tasks, 1) AS num_finished, 
+            array_length(failed_tasks, 1) AS num_failed,
+            json_array_length(task_definitions) AS num_total
         FROM flows
         WHERE status IN ('success', 'failed')
         ORDER BY id ASC
@@ -228,7 +231,7 @@ impl Scheduler {
         LIMIT $2;
         "#;
 
-        let flows: Vec<FlowRecord> = match sqlx::query_as(query)
+        let flows: Vec<FlowListRecord> = match sqlx::query_as(query)
             .bind(offset)
             .bind(limit)
             .fetch_all(&self.pool)
@@ -249,7 +252,7 @@ impl Scheduler {
         let query = r#"
         SELECT 
             id, plan, current_stage, running_tasks, finished_tasks, failed_tasks,
-            task_definitions, flow_name, status AS "status: FlowStatus"
+            task_definitions, flow_name, status
         FROM flows
         WHERE id = $1
         "#;
@@ -369,7 +372,7 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{model::Task, pool::get_test_pool};
+    use crate::server::{model::Task, pool::get_test_pool, record::FlowStatus};
     use serial_test::serial;
     use std::collections::BTreeSet;
 
@@ -397,11 +400,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    #[serial]
-    async fn test_scheduler() {
-        let pool = get_test_pool(&["flows"]).await;
-
+    async fn setup_mock_data(scheduler: &Scheduler) -> (i32, i32) {
         let test_tasks_0 = vec![
             create_fake_task("flow-0-task-0"),
             create_fake_task("flow-0-task-1"),
@@ -427,9 +426,6 @@ mod tests {
             BTreeSet::from([2]),
         ]);
 
-        let scheduler = Scheduler::new(pool);
-        let mut rx = scheduler.subscribe();
-
         let flow_id_0 = scheduler
             .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
             .await
@@ -439,6 +435,18 @@ mod tests {
             .create_flow("flow-1".to_string(), test_plan_1, test_tasks_1)
             .await
             .unwrap();
+
+        (flow_id_0, flow_id_1)
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_scheduler() {
+        let pool = get_test_pool(&["flows"]).await;
+        let scheduler = Scheduler::new(pool);
+        let mut rx = scheduler.subscribe();
+
+        let (flow_id_0, flow_id_1) = setup_mock_data(&scheduler).await;
 
         assert_eq!(
             scheduler.get_running_or_pending_flow_ids().await.unwrap(),
@@ -539,35 +547,13 @@ mod tests {
     #[serial]
     async fn test_scheduler_flow_does_not_exist() {
         let pool = get_test_pool(&["flows"]).await;
-
-        let test_tasks_0 = vec![
-            create_fake_task("flow-0-task-0"),
-            create_fake_task("flow-0-task-1"),
-        ];
-
-        let test_plan_0 = Plan(vec![BTreeSet::from([0]), BTreeSet::from([1])]);
-
-        let test_tasks_1 = vec![
-            create_fake_task("flow-1-task-0"),
-            create_fake_task("flow-1-task-1"),
-        ];
-
-        let test_plan_1 = Plan(vec![BTreeSet::from([0]), BTreeSet::from([1])]);
-
         let scheduler = Scheduler::new(pool);
 
-        let flow_id_0 = scheduler
-            .create_flow("flow-0".to_string(), test_plan_0, test_tasks_0)
-            .await
-            .unwrap();
-        let _flow_id_1 = scheduler
-            .create_flow("flow-1".to_string(), test_plan_1, test_tasks_1)
-            .await
-            .unwrap();
+        let (flow_id_0, _flow_id_1) = setup_mock_data(&scheduler).await;
 
         let does_not_exist_id = flow_id_0 + 1000;
 
-        fn assert_flow_does_not_exist_error(result: Result<(), SchedulerError>, flow_id: i32) {
+        fn assert_flow_does_not_exist_error<T>(result: Result<T, SchedulerError>, flow_id: i32) {
             assert!(match result {
                 Err(SchedulerError::FlowDoesNotExist(id)) => id == flow_id,
                 _ => false,
@@ -589,9 +575,110 @@ mod tests {
             does_not_exist_id,
         );
 
+        assert_flow_does_not_exist_error(
+            scheduler.get_flow(does_not_exist_id).await,
+            does_not_exist_id,
+        );
+
         assert_eq!(
             scheduler.schedule_tasks(does_not_exist_id).await.unwrap(),
             None
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_scheduler_get() {
+        let pool = get_test_pool(&["flows"]).await;
+        let scheduler = Scheduler::new(pool);
+
+        assert_eq!(scheduler.list_flows().await.unwrap(), vec![]);
+        assert_eq!(
+            scheduler.list_terminated_flows(0, 1000).await.unwrap(),
+            vec![]
+        );
+
+        let (flow_id_0, flow_id_1) = setup_mock_data(&scheduler).await;
+
+        assert_eq!(
+            scheduler.list_flows().await.unwrap(),
+            vec![
+                FlowListRecord {
+                    id: flow_id_0,
+                    flow_name: "flow-0".to_string(),
+                    status: FlowStatus::Pending,
+                    num_running: None,
+                    num_finished: None,
+                    num_failed: None,
+                    num_total: Some(4),
+                },
+                FlowListRecord {
+                    id: flow_id_1,
+                    flow_name: "flow-1".to_string(),
+                    status: FlowStatus::Pending,
+                    num_running: None,
+                    num_finished: None,
+                    num_failed: None,
+                    num_total: Some(3),
+                }
+            ]
+        );
+
+        scheduler.mark_task_running(flow_id_0, 0).await.unwrap();
+        scheduler.mark_task_failed(flow_id_1, 0).await.unwrap();
+
+        assert_eq!(
+            scheduler.get_flow(flow_id_1).await.unwrap(),
+            FlowRecord {
+                id: flow_id_1,
+                flow_name: "flow-1".to_string(),
+                status: FlowStatus::Failed,
+                plan: serde_json::json!([[0], [1], [2]]),
+                current_stage: 0,
+                running_tasks: vec![],
+                finished_tasks: vec![],
+                failed_tasks: vec![0],
+                task_definitions: serde_json::to_value(vec![
+                    create_fake_task("flow-1-task-0"),
+                    create_fake_task("flow-1-task-1"),
+                    create_fake_task("flow-1-task-2"),
+                ])
+                .unwrap(),
+            }
+        );
+
+        assert_eq!(
+            scheduler.get_flow(flow_id_0).await.unwrap(),
+            FlowRecord {
+                id: flow_id_0,
+                flow_name: "flow-0".to_string(),
+                status: FlowStatus::Running,
+                plan: serde_json::json!([[0], [1, 2], [3]]),
+                current_stage: 0,
+                running_tasks: vec![0],
+                finished_tasks: vec![],
+                failed_tasks: vec![],
+                task_definitions: serde_json::to_value(vec![
+                    create_fake_task("flow-0-task-0"),
+                    create_fake_task("flow-0-task-1"),
+                    create_fake_task("flow-0-task-2"),
+                    create_fake_task("flow-0-task-3"),
+                ])
+                .unwrap(),
+            }
+        );
+
+        assert_eq!(
+            scheduler.list_terminated_flows(0, 1000).await.unwrap(),
+            vec![FlowListRecord {
+                id: flow_id_1,
+                flow_name: "flow-1".to_string(),
+                status: FlowStatus::Failed,
+                num_running: None,
+                num_finished: None,
+                num_failed: Some(1),
+                num_total: Some(3),
+            }]
         );
     }
 }

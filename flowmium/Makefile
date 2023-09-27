@@ -10,8 +10,6 @@ up:
 
 test:
 	mkdir -p target
-
-	# Run sqlx migrations
 	sqlx migrate run
 
 ifneq (,${FLOWMIUM_INIT_CONTAINER_IMAGE_FROM_SOURCE})

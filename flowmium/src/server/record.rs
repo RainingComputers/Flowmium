@@ -3,7 +3,7 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 
 #[derive(sqlx::Type, Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[sqlx(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case", type_name = "flow_status")]
 pub enum FlowStatus {
     Pending,
     Running,
