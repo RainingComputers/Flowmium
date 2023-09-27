@@ -25,13 +25,11 @@ impl SecretsCrud {
     }
 
     pub async fn create_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
-        match sqlx::query!(
-            r#"INSERT INTO secrets (secret_key, secret_value) VALUES ($1, $2)"#,
-            key,
-            value
-        )
-        .execute(&self.pool)
-        .await
+        match sqlx::query(r#"INSERT INTO secrets (secret_key, secret_value) VALUES ($1, $2)"#)
+            .bind(&key)
+            .bind(value)
+            .execute(&self.pool)
+            .await
         {
             Ok(_) => Ok(()),
             Err(error) => {
@@ -51,7 +49,8 @@ impl SecretsCrud {
     }
 
     pub async fn delete_secret(&self, key: String) -> Result<(), SecretsCrudError> {
-        let rows_updated = match sqlx::query!(r#"DELETE from secrets WHERE secret_key = $1"#, key)
+        let rows_updated = match sqlx::query(r#"DELETE from secrets WHERE secret_key = $1"#)
+            .bind(&key)
             .execute(&self.pool)
             .await
         {
@@ -66,44 +65,42 @@ impl SecretsCrud {
     }
 
     pub async fn update_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
-        let rows_updated = match sqlx::query!(
-            r#"UPDATE secrets SET secret_value = $2 WHERE secret_key = $1"#,
-            key,
-            value
-        )
-        .execute(&self.pool)
-        .await
-        {
-            Ok(result) => result.rows_affected(),
-            Err(error) => {
-                tracing::error!(%error, "Unable to delete secret {}", key);
-                return Err(SecretsCrudError::DatabaseQuery(error));
-            }
-        };
+        let rows_updated =
+            match sqlx::query(r#"UPDATE secrets SET secret_value = $2 WHERE secret_key = $1"#)
+                .bind(&key)
+                .bind(value)
+                .execute(&self.pool)
+                .await
+            {
+                Ok(result) => result.rows_affected(),
+                Err(error) => {
+                    tracing::error!(%error, "Unable to update secret {}", key);
+                    return Err(SecretsCrudError::DatabaseQuery(error));
+                }
+            };
 
         check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
     }
 
     pub async fn get_secret(&self, key: &str) -> Result<String, SecretsCrudError> {
-        let secret_optional = match sqlx::query!(
-            r#"SELECT secret_value FROM secrets WHERE secret_key = $1"#,
-            key
-        )
-        .fetch_optional(&self.pool)
-        .await
-        {
-            Ok(secret_optional) => secret_optional,
-            Err(error) => {
-                tracing::error!(%error, "Could not fetch secret for secrets database");
-                return Err(SecretsCrudError::DatabaseQuery(error));
-            }
-        };
+        let record: Option<(String,)> =
+            match sqlx::query_as(r#"SELECT secret_value FROM secrets WHERE secret_key = $1"#)
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await
+            {
+                Ok(secret_optional) => secret_optional,
+                Err(error) => {
+                    tracing::error!(%error, "Could not fetch secret for secrets database");
+                    return Err(SecretsCrudError::DatabaseQuery(error));
+                }
+            };
 
-        let Some(record) = secret_optional else {
+        let Some(record) = record else {
             return Err(SecretsCrudError::SecretDoesNotExist(key.to_owned()));
         };
 
-        Ok(record.secret_value)
+        Ok(record.0)
     }
 }
 

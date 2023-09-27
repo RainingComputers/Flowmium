@@ -2,10 +2,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
-use crate::{
-    server::record::FlowListRecord,
-    server::record::{FlowRecord, FlowStatus},
-};
+use crate::{server::record::FlowListRecord, server::record::FlowRecord};
 use tokio::sync::broadcast;
 
 use super::{model::Task, planner::Plan, pool::check_rows_updated, record::TaskStatus};
@@ -20,8 +17,6 @@ pub enum SchedulerError {
     DatabaseQuery(#[source] sqlx::error::Error),
     #[error("flow {0} does not exist error")]
     FlowDoesNotExist(i32),
-    #[error("unable to serialize/deserialize JSON: {0}")]
-    SerializeDeserialize(#[source] serde_json::Error),
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -61,55 +56,36 @@ impl Scheduler {
         plan: Plan,
         task_definitions: Vec<Task>,
     ) -> Result<i32, SchedulerError> {
-        let task_definitions_json = match serde_json::to_value(task_definitions) {
-            Ok(value) => value,
-            Err(error) => {
-                tracing::error!(%error, "Unable to serialize task definition to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserialize(error));
-            }
-        };
+        // Task does not have custom impl of Serialize or a key that is not a string
+        let task_definitions =
+            serde_json::to_value(task_definitions).expect("Failed to serialize task");
 
-        let plan_json = match serde_json::to_value(plan) {
-            Ok(value) => value,
-            Err(error) => {
-                tracing::error!(%error, "Unable to serialize plan to JSON while creating flow");
-                return Err(SchedulerError::SerializeDeserialize(error));
-            }
-        };
+        // Plan does not have custom impl of Serialize or a key that is not a string
+        let plan = serde_json::to_value(plan).expect("Failed to serialize plan");
 
-        let id = match sqlx::query!(
-            r#"
-            INSERT INTO flows (
-                plan,
-                current_stage,
-                running_tasks,
-                finished_tasks,
-                failed_tasks,
-                task_definitions,
-                flow_name,
-                status
-            ) VALUES (
-                $1,
-                0,
-                '{}',
-                '{}',
-                '{}',
-                $2,
-                $3,
-                'pending'
-            ) RETURNING id;
-            "#,
-            plan_json,
-            task_definitions_json,
-            flow_name
-        )
-        .map(|record| record.id)
-        .fetch_one(&self.pool)
-        .await
+        let query = r#"
+        INSERT INTO flows (
+            plan,
+            current_stage, running_tasks, finished_tasks, failed_tasks,
+            task_definitions, flow_name, status
+        ) VALUES (
+            $1,
+            0, '{}', '{}', '{}',
+            $2, $3, 'pending'
+        ) RETURNING id;
+        "#;
+
+        let id: i32 = match sqlx::query_as(query)
+            .bind(plan)
+            .bind(task_definitions)
+            .bind(flow_name)
+            .fetch_one(&self.pool)
+            .await
+            .map(|record: (i32,)| record.0)
         {
             Ok(id) => id,
             Err(error) => {
-                tracing::error!(%error, "Unable to create flow in database");
+                tracing::error!(%error, "Error creating flow in database");
                 return Err(SchedulerError::DatabaseQuery(error));
             }
         };
@@ -121,29 +97,22 @@ impl Scheduler {
         Ok(id)
     }
 
-    #[tracing::instrument(skip(self))]
-    pub(crate) async fn mark_task_running(
+    async fn run_mark_query(
         &self,
         flow_id: i32,
         task_id: i32,
+        status: TaskStatus,
+        query: &'static str,
     ) -> Result<(), SchedulerError> {
-        let rows_updated = match sqlx::query!(
-            r#"
-            UPDATE flows
-            SET 
-                running_tasks = array_append(running_tasks, $1),
-                status       = 'running'::flow_status
-            WHERE id = $2;
-            "#,
-            task_id,
-            flow_id
-        )
-        .execute(&self.pool)
-        .await
+        let rows_updated = match sqlx::query(query)
+            .bind(task_id)
+            .bind(flow_id)
+            .execute(&self.pool)
+            .await
         {
             Ok(result) => result.rows_affected(),
             Err(error) => {
-                tracing::error!(%error, "Unable to mark flow {} task {} as 'running' in database", flow_id, task_id);
+                tracing::error!(%error, "Unable to mark flow {} task {} as {} in database", flow_id, task_id, status);
                 return Err(SchedulerError::DatabaseQuery(error));
             }
         };
@@ -153,10 +122,28 @@ impl Scheduler {
         let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
             flow_id,
             task_id,
-            status: TaskStatus::Running,
+            status,
         });
 
         Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn mark_task_running(
+        &self,
+        flow_id: i32,
+        task_id: i32,
+    ) -> Result<(), SchedulerError> {
+        let query = r#"
+        UPDATE flows
+        SET 
+            running_tasks = array_append(running_tasks, $1),
+            status       = 'running'::flow_status
+        WHERE id = $2;
+        "#;
+
+        self.run_mark_query(flow_id, task_id, TaskStatus::Running, query)
+            .await
     }
 
     #[tracing::instrument(skip(self))]
@@ -165,42 +152,20 @@ impl Scheduler {
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), SchedulerError> {
-        let rows_updated = match sqlx::query!(
-            r#"
-            UPDATE flows
-            SET running_tasks = array_remove(running_tasks, $1),
-                finished_tasks = array_append(finished_tasks, $1),
-            status =
-                    case
-                        when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
-                        else status
-                    end
-            WHERE id = $2;
-            "#,
-            task_id,
-            flow_id
-        )
-        .execute(&self.pool)
-        .await
-        {
-            Ok(result) => {
-               result.rows_affected()
-            },
-            Err(error) => {
-                tracing::error!(%error, "Unable to mark flow {} task {} as 'finished' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQuery(error));
-            }
-        };
+        let query = r#"
+        UPDATE flows
+        SET running_tasks = array_remove(running_tasks, $1),
+            finished_tasks = array_append(finished_tasks, $1),
+        status =
+                case
+                    when json_array_length(task_definitions) - 1 = cardinality(finished_tasks)  then 'success'::flow_status
+                    else status
+                end
+        WHERE id = $2;
+        "#;
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExist(flow_id))?;
-
-        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
-            flow_id,
-            task_id,
-            status: TaskStatus::Finished,
-        });
-
-        Ok(())
+        self.run_mark_query(flow_id, task_id, TaskStatus::Finished, query)
+            .await
     }
 
     #[tracing::instrument(skip(self))]
@@ -209,93 +174,36 @@ impl Scheduler {
         flow_id: i32,
         task_id: i32,
     ) -> Result<(), SchedulerError> {
-        let rows_updated = match sqlx::query!(
-            r#"
-            UPDATE flows
-            SET running_tasks = array_remove(running_tasks, $1),
-                failed_tasks = array_append(failed_tasks, $1),
-                status       = 'failed'::flow_status
-            WHERE id = $2;
-            "#,
-            task_id,
-            flow_id
-        )
-        .execute(&self.pool)
-        .await
-        {
-            Ok(result) => result.rows_affected(),
-            Err(error) => {
-                tracing::error!(%error, "Unable to mark flow {} task {} as 'failed' in database", flow_id, task_id);
-                return Err(SchedulerError::DatabaseQuery(error));
-            }
-        };
+        let query = r#"
+        UPDATE flows
+        SET running_tasks = array_remove(running_tasks, $1),
+            failed_tasks = array_append(failed_tasks, $1),
+            status       = 'failed'::flow_status
+        WHERE id = $2;
+        "#;
 
-        check_rows_updated(rows_updated, SchedulerError::FlowDoesNotExist(flow_id))?;
-
-        let _ = self.tx.send(SchedulerEvent::TaskStatusUpdateEvent {
-            flow_id,
-            task_id,
-            status: TaskStatus::Failed,
-        });
-
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub async fn get_running_or_pending_flow_ids(
-        &self,
-    ) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
-        struct RunningPendingSelectQueryRecord {
-            id: i32,
-            running_tasks: Vec<i32>,
-        }
-
-        let flows = match sqlx::query_as!(
-            RunningPendingSelectQueryRecord,
-            r#"
-            SELECT id, running_tasks
-            FROM flows
-            WHERE status IN ('running', 'pending')
-            ORDER BY id ASC
-            LIMIT 1000;
-            "#
-        )
-        .map(|record| (record.id, record.running_tasks))
-        .fetch_all(&self.pool)
-        .await
-        {
-            Ok(flows) => flows,
-            Err(error) => {
-                tracing::error!(%error, "Unable to fetch running or pending flows from database");
-                return Err(SchedulerError::DatabaseQuery(error));
-            }
-        };
-
-        Ok(flows)
+        self.run_mark_query(flow_id, task_id, TaskStatus::Failed, query)
+            .await
     }
 
     #[tracing::instrument(skip(self))]
     pub async fn list_flows(&self) -> Result<Vec<FlowListRecord>, SchedulerError> {
-        let flows = match sqlx::query_as!(
-            FlowListRecord,
-            r#"
-            SELECT 
-                id, flow_name, status AS "status: FlowStatus", 
-                array_length(running_tasks, 1) AS num_running, 
-                array_length(finished_tasks, 1) AS num_finished, 
-                array_length(failed_tasks, 1) AS num_failed,
-                json_array_length(task_definitions) AS num_total
-            FROM flows
-            ORDER BY id ASC
-            LIMIT 1000;
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await
-        {
+        let query = r#"
+        SELECT 
+            id, flow_name, status AS "status: FlowStatus", 
+            array_length(running_tasks, 1) AS num_running, 
+            array_length(finished_tasks, 1) AS num_finished, 
+            array_length(failed_tasks, 1) AS num_failed,
+            json_array_length(task_definitions) AS num_total
+        FROM flows
+        ORDER BY id ASC
+        LIMIT 1000;
+        "#;
+
+        let flows: Vec<FlowListRecord> = match sqlx::query_as(query).fetch_all(&self.pool).await {
             Ok(flows) => flows,
             Err(error) => {
-                tracing::error!(%error, "Unable to fetch running or pending flows from database");
+                tracing::error!(%error, "Unable to list flows on database");
                 return Err(SchedulerError::DatabaseQuery(error));
             }
         };
@@ -309,23 +217,22 @@ impl Scheduler {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<FlowRecord>, SchedulerError> {
-        let flows = match sqlx::query_as!(
-            FlowRecord,
-            r#"
-            SELECT 
-                id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks, 
-                task_definitions, flow_name, status AS "status: FlowStatus"
-            FROM flows
-            WHERE status IN ('success', 'failed')
-            ORDER BY id ASC
-            OFFSET $1
-            LIMIT $2;
-            "#,
-            offset,
-            limit,
-        )
-        .fetch_all(&self.pool)
-        .await
+        let query = r#"
+        SELECT 
+            id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks, 
+            task_definitions, flow_name, status AS "status: FlowStatus"
+        FROM flows
+        WHERE status IN ('success', 'failed')
+        ORDER BY id ASC
+        OFFSET $1
+        LIMIT $2;
+        "#;
+
+        let flows: Vec<FlowRecord> = match sqlx::query_as(query)
+            .bind(offset)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
         {
             Ok(flows) => flows,
             Err(error) => {
@@ -339,19 +246,18 @@ impl Scheduler {
 
     #[tracing::instrument(skip(self))]
     pub async fn get_flow(&self, id: i32) -> Result<FlowRecord, SchedulerError> {
-        let flow_optional = match sqlx::query_as!(
-            FlowRecord,
-            r#"
-            SELECT 
-                id, plan AS "plan: Plan", current_stage, running_tasks, finished_tasks, failed_tasks,
-                task_definitions, flow_name, status AS "status: FlowStatus"
-            FROM flows
-            WHERE id = $1
-            "#,
-            id,
-        )
-        .fetch_optional(&self.pool)
-        .await
+        let query = r#"
+        SELECT 
+            id, plan, current_stage, running_tasks, finished_tasks, failed_tasks,
+            task_definitions, flow_name, status AS "status: FlowStatus"
+        FROM flows
+        WHERE id = $1
+        "#;
+
+        let flow_optional: Option<FlowRecord> = match sqlx::query_as(query)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
         {
             Ok(flows) => flows,
             Err(error) => {
@@ -364,6 +270,29 @@ impl Scheduler {
             None => Err(SchedulerError::FlowDoesNotExist(id)),
             Some(flow) => Ok(flow),
         }
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn get_running_or_pending_flow_ids(
+        &self,
+    ) -> Result<Vec<(i32, Vec<i32>)>, SchedulerError> {
+        let query = r#"
+        SELECT id, running_tasks
+        FROM flows
+        WHERE status IN ('running', 'pending')
+        ORDER BY id ASC
+        LIMIT 1000;
+        "#;
+
+        let flows: Vec<(i32, Vec<i32>)> = match sqlx::query_as(query).fetch_all(&self.pool).await {
+            Ok(flows) => flows,
+            Err(error) => {
+                tracing::error!(%error, "Unable to fetch running or pending flows from database");
+                return Err(SchedulerError::DatabaseQuery(error));
+            }
+        };
+
+        Ok(flows)
     }
 
     fn record_to_tasks(
@@ -393,49 +322,52 @@ impl Scheduler {
         &'a self,
         flow_id: i32,
     ) -> Result<Option<Vec<(i32, Task)>>, SchedulerError> {
-        let record_optional = match sqlx::query!(
-            r#"
-            WITH updated AS (
-                UPDATE flows
-                SET current_stage = 
-                        CASE 
-                            WHEN status = 'running'::flow_status THEN current_stage + 1
-                            ELSE current_stage 
-                        END
-                WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
-                AND current_stage < json_array_length(plan) - 1
-                AND id = $1
-                AND status IN ('running', 'pending')
-                RETURNING  *
-            ) SELECT plan -> current_stage AS "task_id_list", task_definitions AS "tasks" FROM updated;
-            "#, 
-            flow_id
-        ).map(|record| Scheduler::record_to_tasks(record.task_id_list, record.tasks))
-        .fetch_optional(&self.pool)
-        .await {
-            Ok(tasks) => tasks,
-            Err(error)  => {
-                tracing::error!(%error, "Unable to fetch next stage from database");
-                return Err(SchedulerError::DatabaseQuery(error));
-            }
-        };
+        let query = r#"
+        WITH updated AS (
+            UPDATE flows
+            SET current_stage = 
+                    CASE 
+                        WHEN status = 'running'::flow_status THEN current_stage + 1
+                        ELSE current_stage 
+                    END
+            WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
+            AND current_stage < json_array_length(plan) - 1
+            AND id = $1
+            AND status IN ('running', 'pending')
+            RETURNING  *
+        ) SELECT plan -> current_stage AS "task_id_list", task_definitions AS "tasks" FROM updated;
+        "#;
 
-        let Some(stage_tasks_optional) = record_optional else {
+        let record: Option<(Option<serde_json::Value>, serde_json::Value)> =
+            match sqlx::query_as(query)
+                .bind(flow_id)
+                .fetch_optional(&self.pool)
+                .await
+            {
+                Ok(tasks) => tasks,
+                Err(error) => {
+                    tracing::error!(%error, "Unable to fetch next stage from database");
+                    return Err(SchedulerError::DatabaseQuery(error));
+                }
+            };
+
+        let Some(record) = record else {
             return Ok(None);
         };
 
-        let Some(stage_tasks) = stage_tasks_optional else {
+        let tasks = Scheduler::record_to_tasks(record.0, record.1);
+
+        let Some(tasks) = tasks else {
             tracing::error!("Invalid record in database for flow {}", flow_id);
             return Err(SchedulerError::InvalidStoredValue(flow_id));
         };
 
-        Ok(Some(stage_tasks))
+        Ok(Some(tasks))
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::server::{model::Task, pool::get_test_pool};
     use serial_test::serial;

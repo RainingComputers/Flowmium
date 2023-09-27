@@ -1,9 +1,6 @@
-use std::collections::BTreeSet;
+use core::fmt;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{database::HasValueRef, Database};
-
-use super::planner::Plan;
 
 #[derive(sqlx::Type, Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[sqlx(rename_all = "snake_case")]
@@ -22,13 +19,22 @@ pub enum TaskStatus {
     Finished,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+impl fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TaskStatus::Running => write!(f, "running"),
+            TaskStatus::Failed => write!(f, "failed"),
+            TaskStatus::Finished => write!(f, "finished"),
+        }
+    }
+}
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, sqlx::FromRow)]
 pub struct FlowRecord {
     pub id: i32,
     pub flow_name: String,
     pub status: FlowStatus,
-    pub plan: Plan,
+    pub plan: serde_json::Value,
     pub current_stage: i32,
     pub running_tasks: Vec<i32>,
     pub finished_tasks: Vec<i32>,
@@ -36,22 +42,7 @@ pub struct FlowRecord {
     pub task_definitions: serde_json::Value,
 }
 
-impl<'r, DB: Database> sqlx::Decode<'r, DB> for Plan
-where
-    &'r str: sqlx::Decode<'r, DB>,
-{
-    fn decode(
-        value: <DB as HasValueRef<'r>>::ValueRef,
-    ) -> Result<Plan, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let json_value = <&str as sqlx::Decode<DB>>::decode(value)?;
-
-        let stages: Vec<BTreeSet<usize>> = serde_json::from_str(json_value)?;
-
-        Ok(Plan(stages))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, sqlx::FromRow)]
 pub struct FlowListRecord {
     pub id: i32,
     pub flow_name: String,
