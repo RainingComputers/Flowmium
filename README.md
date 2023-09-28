@@ -55,6 +55,14 @@ if __name__ == "__main__":
 
 The `flowctl` CLI is used to monitor current status of workflows, submit new workflows and download artifacts.
 
+### Install
+
+```
+cargo install flowmium
+```
+
+### Usage
+
 | Action              | Command                                                     |
 | ------------------- | ----------------------------------------------------------- |
 | List workflows      | `flowctl list`                                              |
@@ -67,7 +75,9 @@ The `flowctl` CLI is used to monitor current status of workflows, submit new wor
 | Update secret       | `flowctl secret update <key> <value>`                       |
 | Delete secret       | `flowctl secret delete <key>`                               |
 
-NOTE: Secrets are stored in the server and can be referred to set environment variable values in YAML definition or the Python workflows. This is so you don't have to commit secrets to your repository. They don't however use Kubernetes secrets, they are set as normal environment variables when workflow tasks are deployed as a Job.
+## Notes
+
+Secrets are stored in the server and can be referred to set environment variable values in YAML definition or the Python workflows. This is so you don't have to commit secrets to your repository. They don't however use Kubernetes secrets, they are set as normal environment variables when workflow tasks are deployed as a Job.
 
 ## Running from source
 
