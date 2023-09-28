@@ -75,7 +75,7 @@ cargo install flowmium
 | Update secret       | `flowctl secret update <key> <value>`                       |
 | Delete secret       | `flowctl secret delete <key>`                               |
 
-## Notes
+### Notes
 
 Secrets are stored in the server and can be referred to set environment variable values in YAML definition or the Python workflows. This is so you don't have to commit secrets to your repository. They don't however use Kubernetes secrets, they are set as normal environment variables when workflow tasks are deployed as a Job.
 
