@@ -79,6 +79,50 @@ cargo install flowmium
 
 Secrets are stored in the server and can be referred to set environment variable values in YAML definition or the Python workflows. This is so you don't have to commit secrets to your repository. They don't however use Kubernetes secrets, they are set as normal environment variables when workflow tasks are deployed as a Job.
 
+## YAML flow definition schema
+
+Reference for YAML flow definition. [See](examples/yaml_flow_definition/my_flow.yaml) for example.
+
+### Root
+
+| Key     | Type                    | Description                                                   |
+| ------- | ----------------------- | ------------------------------------------------------------- |
+| `name`  | string                  | Name of the flow                                              |
+| `tasks` | list of [Task](###Task) | List of tasks, each task will be deployed as a kubernetes job |
+
+### Task
+
+| Key       | Type                        | Description                                                                                 |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| `name`    | string                      | Name of the task                                                                            |
+| `image`   | string                      | Docker image for the task                                                                   |
+| `depends` | list of string              | List of names of other tasks this task depends on, these tasks will be run before this task |
+| `cmd`     | list of string              | Entry point command the task                                                                |
+| `env`     | list of [Env](###Env)       | List of environment variables for the task                                                  |
+| `inputs`  | list of [Input](###Input)   | List of inputs to download from dependency tasks                                            |
+| `outputs` | list of [Output](###Output) | List of outputs to upload from the task so it can be used by other tasks                    |
+
+### Env
+
+| Key                     | Type   | Description                                                           |
+| ----------------------- | ------ | --------------------------------------------------------------------- |
+| `name`                  | string | Name of the environment variable                                      |
+| `value` or `fromSecret` | string | Literal string value if `value` or name of the secret if `fromSecret` |
+
+### Input
+
+| Key    | Type   | Description                                            |
+| ------ | ------ | ------------------------------------------------------ |
+| `from` | string | Name of output from a dependency task to be downloaded |
+| `path` | string | The path to which to the input should be downloaded to |
+
+### Output
+
+| Key    | Type   | Description                                                         |
+| ------ | ------ | ------------------------------------------------------------------- |
+| `name` | string | Name of the output                                                  |
+| `path` | string | The path to which to the output will be written to by running `cmd` |
+
 ## Running from source
 
 ### Running python flow example from source

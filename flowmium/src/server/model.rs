@@ -8,13 +8,6 @@ pub struct KeyValuePair {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct InputRef {
-    pub name: String,
-    pub from_input: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct SecretRef {
     pub name: String,
     pub from_secret: String,
