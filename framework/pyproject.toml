@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flowmium"
-version = "0.0.1"
+version = "0.0.2"
 description = "Workflow orchestrator for kubernetes."
 license = "MIT"
 authors = ["RainingComputers <vishnu.vish.shankar@gmail.com>"]
