@@ -81,26 +81,26 @@ Secrets are stored in the server and can be referred to set environment variable
 
 ## YAML flow definition schema
 
-Reference for YAML flow definition. [See](examples/yaml_flow_definition/my_flow.yaml) for example.
+Reference for YAML flow definition. See [example](examples/yaml_flow_definition/my_flow.yaml).
 
 ### Root
 
-| Key     | Type                    | Description                                                   |
-| ------- | ----------------------- | ------------------------------------------------------------- |
-| `name`  | string                  | Name of the flow                                              |
-| `tasks` | list of [Task](###Task) | List of tasks, each task will be deployed as a kubernetes job |
+| Key     | Type                  | Description                                                   |
+| ------- | --------------------- | ------------------------------------------------------------- |
+| `name`  | string                | Name of the flow                                              |
+| `tasks` | list of [Task](#task) | List of tasks, each task will be deployed as a kubernetes job |
 
 ### Task
 
-| Key       | Type                        | Description                                                                                 |
-| --------- | --------------------------- | ------------------------------------------------------------------------------------------- |
-| `name`    | string                      | Name of the task                                                                            |
-| `image`   | string                      | Docker image for the task                                                                   |
-| `depends` | list of string              | List of names of other tasks this task depends on, these tasks will be run before this task |
-| `cmd`     | list of string              | Entry point command the task                                                                |
-| `env`     | list of [Env](###Env)       | List of environment variables for the task                                                  |
-| `inputs`  | list of [Input](###Input)   | List of inputs to download from dependency tasks                                            |
-| `outputs` | list of [Output](###Output) | List of outputs to upload from the task so it can be used by other tasks                    |
+| Key       | Type                      | Description                                                                                 |
+| --------- | ------------------------- | ------------------------------------------------------------------------------------------- |
+| `name`    | string                    | Name of the task                                                                            |
+| `image`   | string                    | Docker image for the task                                                                   |
+| `depends` | list of string            | List of names of other tasks this task depends on, these tasks will be run before this task |
+| `cmd`     | list of string            | Entry point command the task                                                                |
+| `env`     | list of [Env](#env)       | List of environment variables for the task                                                  |
+| `inputs`  | list of [Input](#input)   | List of inputs to download from dependency tasks                                            |
+| `outputs` | list of [Output](#output) | List of outputs to upload from the task so it can be used by other tasks                    |
 
 ### Env
 
