@@ -2,46 +2,75 @@ use getset::Getters;
 use reqwest::Response;
 use thiserror::Error;
 use tokio_stream::StreamExt;
+use tokio_tungstenite::tungstenite;
+use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use crate::server::event::{SchedulerEvent, SchedulerEventResult};
 use crate::server::model::Flow;
 use crate::server::record::{FlowListRecord, FlowRecord};
 
+/// An error while making a request to the server.
 #[derive(Error, Debug)]
 pub enum ClientError {
+    /// Unable to parse an invalid or malformed URL.
     #[error("invalid url error: {0}")]
     InvalidUrl(
         #[source]
         #[from]
         url::ParseError,
     ),
+    /// Unable to make a request or connection or malformed response in body.
     #[error("request error: {0}")]
     Request(
         #[source]
         #[from]
         reqwest::Error,
     ),
+    /// Request was sent but the server responded with non 200 HTTP status code.
     #[error("response {0} error: {1}")]
     ResponseNotOk(u16, String),
+    /// Error performing file operations.
     #[error("io error: {0}")]
     Io(
         #[source]
         #[from]
         std::io::Error,
     ),
+    /// Unable to edit the URL scheme into a `ws://` or `wss://`.
+    #[error("url scheme conversion error")]
+    UrlSchemeConversion,
+    /// Unable to make a websocket connection.
     #[error("websocket error: {0}")]
     Websocket(
         #[source]
         #[from]
         tokio_tungstenite::tungstenite::Error,
     ),
-    #[error("url scheme conversion error")]
-    UrlSchemeConversion,
 }
 
+/// An error while receiving events from websocket.
+#[derive(Error, Debug)]
+pub enum ClientWebsocketError {
+    /// Unable to make a websocket connection or websocket connection closed unexpectedly.
+    #[error("websocket error: {0}")]
+    Websocket(
+        #[source]
+        #[from]
+        tokio_tungstenite::tungstenite::Error,
+    ),
+    /// Invalid or malformed event from server.
+    #[error("malformed event error: {0}")]
+    MalformedEvent(serde_json::Error),
+    /// Client or server is unable to keep up and some events might have been missed.
+    #[error("lag error: {0}")]
+    Lag(u64),
+}
+
+/// Wrapper type for [`Vec<FlowListRecord>`](FlowListRecord) with a pretty implementation for [`std::fmt::Display`].
 #[derive(Getters, Debug)]
 pub struct FlowList {
     #[getset(get = "pub")]
@@ -66,12 +95,14 @@ impl<'a> IntoIterator for &'a FlowList {
     }
 }
 
+/// New type for number of bytes downloaded.
 #[derive(Getters, Debug)]
 pub struct BytesDownloaded {
     #[getset(get = "pub")]
     num_bytes: u64,
 }
 
+/// Indicates the request was successful and the server responded with a 200 HTTP status code.
 pub struct Okay();
 
 fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
@@ -81,6 +112,7 @@ fn get_abs_url(url: &str, path: &str) -> Result<Url, ClientError> {
     Ok(joined)
 }
 
+/// List workflows and their status in the server.
 pub async fn list_workflows(url: &str) -> Result<FlowList, ClientError> {
     let abs_url = get_abs_url(url, "/api/v1/job")?;
 
@@ -92,6 +124,7 @@ pub async fn list_workflows(url: &str) -> Result<FlowList, ClientError> {
     })
 }
 
+/// Get more details status of a workflow, like the plan, number of running tasks etc.
 pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> {
     let abs_url = get_abs_url(url, &format!("/api/v1/job/{}", id))?;
 
@@ -116,6 +149,7 @@ async fn check_status_take(response: reqwest::Response) -> Result<Okay, ClientEr
     Ok(Okay())
 }
 
+/// Create a secret in the server.
 pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
@@ -124,6 +158,7 @@ pub async fn create_secret(url: &str, key: &str, value: &str) -> Result<Okay, Cl
     check_status_take(client.post(abs_url).json::<str>(value).send().await?).await
 }
 
+/// Update a secret in the server.
 pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
@@ -132,6 +167,7 @@ pub async fn update_secret(url: &str, key: &str, value: &str) -> Result<Okay, Cl
     check_status_take(client.put(abs_url).json::<str>(value).send().await?).await
 }
 
+/// Delete a secret in the server.
 pub async fn delete_secret(url: &str, key: &str) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, &format!("api/v1/secret/{}", key))?;
 
@@ -155,6 +191,7 @@ fn get_path_from_response_url(
     Path::new(dir_path).join(file_name)
 }
 
+/// Download artefact output of a task in a workflow.
 pub async fn download_artefact(url: &str, id: &str, name: &str) -> Result<Response, ClientError> {
     let abs_url = get_abs_url(url, &format!("/api/v1/artefact/{}/{}", id, name))?;
 
@@ -163,6 +200,8 @@ pub async fn download_artefact(url: &str, id: &str, name: &str) -> Result<Respon
     check_status(response).await
 }
 
+/// Download artefact output of a task in a workflow and save it to a directory path.
+/// Here `name` is the name of the output as defined in the flow definition and `dest` is path to a directory.
 pub async fn download_artefact_to_path(
     url: &str,
     id: &str,
@@ -190,29 +229,47 @@ fn get_ws_scheme(secure: bool) -> &'static str {
     "ws"
 }
 
-pub async fn subscribe<F>(url: &str, secure: bool, on_message: F) -> Result<Okay, ClientError>
-where
-    F: Fn(String),
-{
+/// Subscribe to scheduler events on the server.
+pub async fn subscribe(
+    url: &str,
+    secure: bool,
+) -> Result<impl StreamExt<Item = Result<SchedulerEvent, ClientWebsocketError>>, ClientError> {
     let mut abs_url = get_abs_url(url, "/api/v1/scheduler/ws")?;
 
     if abs_url.set_scheme(get_ws_scheme(secure)).is_err() {
         return Err(ClientError::UrlSchemeConversion);
     };
 
-    let (mut ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;
+    let (ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;
 
-    while let Some(msg) = ws_stream.next().await {
-        let msg = msg?;
-
-        if msg.is_text() {
-            on_message(msg.to_string());
+    fn text_only(msg: &Result<Message, tungstenite::Error>) -> bool {
+        match msg {
+            Err(_) => true,
+            Ok(msg) => msg.is_text(),
         }
     }
 
-    Ok(Okay())
+    fn deserialize_msg(
+        msg: Result<Message, tungstenite::Error>,
+    ) -> Result<SchedulerEvent, ClientWebsocketError> {
+        match msg {
+            Err(error) => Err(ClientWebsocketError::Websocket(error)),
+            Ok(msg) => match serde_json::from_str::<SchedulerEventResult>(&msg.to_string()) {
+                Err(error) => Err(ClientWebsocketError::MalformedEvent(error)),
+                Ok(event_result) => match event_result {
+                    SchedulerEventResult::Lag(lag) => Err(ClientWebsocketError::Lag(lag)),
+                    SchedulerEventResult::Event(event) => Ok(event),
+                },
+            },
+        }
+    }
+
+    let output_stream = ws_stream.filter(text_only).map(deserialize_msg);
+
+    Ok(output_stream)
 }
 
+/// Submit a workflow to the server.
 pub async fn submit(url: &str, flow: &Flow) -> Result<Okay, ClientError> {
     let abs_url = get_abs_url(url, "/api/v1/job")?;
 

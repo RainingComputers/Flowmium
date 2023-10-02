@@ -1,11 +1,12 @@
-use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::collections::BTreeSet;
 
 use crate::{server::record::FlowListRecord, server::record::FlowRecord};
 use tokio::sync::broadcast;
 
-use super::{model::Task, planner::Plan, pool::check_rows_updated, record::TaskStatus};
+use super::{
+    event::SchedulerEvent, model::Task, planner::Plan, pool::check_rows_updated, record::TaskStatus,
+};
 
 use thiserror::Error;
 
@@ -17,19 +18,6 @@ pub enum SchedulerError {
     DatabaseQuery(#[source] sqlx::error::Error),
     #[error("flow {0} does not exist error")]
     FlowDoesNotExist(i32),
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(rename_all = "snake_case", tag = "type", content = "detail")]
-pub enum SchedulerEvent {
-    TaskStatusUpdateEvent {
-        flow_id: i32,
-        task_id: i32,
-        status: TaskStatus,
-    },
-    FlowCreatedEvent {
-        flow_id: i32,
-    },
 }
 
 #[derive(Debug, Clone)]
