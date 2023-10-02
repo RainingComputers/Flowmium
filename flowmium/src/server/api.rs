@@ -6,26 +6,29 @@ use actix_web::{
     App, HttpRequest, HttpResponse, HttpServer, ResponseError,
 };
 use s3::Bucket;
-use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use tokio::sync::broadcast;
 
 use actix::{Actor, AsyncContext, SpawnHandle, StreamHandler};
 use actix_web_actors::ws;
-use tokio_stream::{wrappers::errors::BroadcastStreamRecvError, StreamExt};
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 use crate::{
     server::{
         executor::{instantiate_flow, ExecutorError},
         model::Flow,
         record::{FlowListRecord, FlowRecord},
-        scheduler::{Scheduler, SchedulerError, SchedulerEvent},
+        scheduler::Scheduler,
         secrets::SecretsCrud,
     },
     task::{bucket::get_artefact, driver::get_store_path, errors::ArtefactError},
 };
 
-use super::secrets::SecretsCrudError;
+use super::{
+    event::{to_event_result, SchedulerEvent},
+    scheduler::SchedulerError,
+    secrets::SecretsCrudError,
+};
 
 impl ResponseError for ExecutorError {
     fn status_code(&self) -> StatusCode {
@@ -142,13 +145,6 @@ async fn update_secret(
     Ok("")
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case", tag = "type", content = "detail")]
-enum SchedulerRecvError {
-    Lag(u64),
-    InternalServerError,
-}
-
 struct SchedulerWebsocket {
     rx: Option<broadcast::Receiver<SchedulerEvent>>,
     spawn_handle: Option<SpawnHandle>,
@@ -161,25 +157,11 @@ impl Actor for SchedulerWebsocket {
         // NOTE: This function will only be called once, so unwrap() is okay
         let rx = self.rx.take().unwrap();
 
-        let rx_event_to_json =
-            |event_result: Result<SchedulerEvent, BroadcastStreamRecvError>| match event_result {
-                Ok(event) => serde_json::to_string(&event),
-                Err(error) => match error {
-                    BroadcastStreamRecvError::Lagged(count) => {
-                        serde_json::to_string(&SchedulerRecvError::Lag(count))
-                    }
-                },
-            };
+        let to_json_string = |event| serde_json::to_string(&event).unwrap();
 
-        let unwrap_serde_result =
-            |str_event_result: serde_json::Result<String>| match str_event_result {
-                Ok(string) => string,
-                Err(_) => serde_json::to_string(&SchedulerRecvError::InternalServerError).unwrap(),
-            };
-
-        let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
-            .map(rx_event_to_json)
-            .map(unwrap_serde_result)
+        let stream = BroadcastStream::new(rx)
+            .map(to_event_result)
+            .map(to_json_string)
             .map(bytestring::ByteString::from)
             .map(ws::Message::Text)
             .map(Ok);

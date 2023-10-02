@@ -1,20 +1,28 @@
 use std::future::Future;
 use std::process::ExitCode;
 
+use tokio_stream::StreamExt;
+
 use crate::client::args;
 use crate::client::requests;
 
 use crate::client::requests::ClientError;
 use crate::server::model::Flow;
 
-async fn make_request<T, F>(req_func: impl Fn() -> F) -> Result<String, ClientError>
+async fn make_request<T, F>(req_func: impl Fn() -> F) -> ExitCode
 where
     F: Future<Output = Result<T, ClientError>>,
     T: std::fmt::Display,
 {
     match req_func().await {
-        Ok(resp) => Ok(format!("{}", resp)),
-        Err(error) => Err(error),
+        Ok(resp) => {
+            println!("{}", resp);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprint!("{}", error);
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -42,10 +50,11 @@ async fn get_flow_from_file(file_path: String) -> Result<Flow, ExitCode> {
     Ok(flow)
 }
 
+/// Parse CLI arguments and run `flowctl`.
 pub async fn run() -> ExitCode {
     let args: args::FlowCtlOptions = argh::from_env();
 
-    let formatted_req_resp = match args.command {
+    match args.command {
         args::Command::List(_) => make_request(|| requests::list_workflows(&args.url)).await,
         args::Command::Describe(describe_opts) => {
             make_request(|| requests::get_status(&args.url, &describe_opts.id)).await
@@ -78,12 +87,6 @@ pub async fn run() -> ExitCode {
             })
             .await
         }
-        args::Command::Subscribe(subscribe_opts) => {
-            make_request(|| {
-                requests::subscribe(&args.url, subscribe_opts.secure, |msg| println!("{}", msg))
-            })
-            .await
-        }
         args::Command::Submit(submit_opts) => {
             let flow = match get_flow_from_file(submit_opts.file_path).await {
                 Err(exit_code) => return exit_code,
@@ -92,16 +95,27 @@ pub async fn run() -> ExitCode {
 
             make_request(|| requests::submit(&args.url, &flow)).await
         }
-    };
+        args::Command::Subscribe(subscribe_opts) => {
+            let stream = requests::subscribe(&args.url, subscribe_opts.secure).await;
 
-    match formatted_req_resp {
-        Ok(string) => {
-            println!("{}", string);
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprint!("{}", error);
-            ExitCode::FAILURE
+            match stream {
+                Err(error) => {
+                    eprintln!("{}", error);
+                    ExitCode::FAILURE
+                }
+                Ok(mut stream) => loop {
+                    match stream.next().await {
+                        Some(Err(error)) => {
+                            eprintln!("{}", error);
+                            break ExitCode::FAILURE;
+                        }
+                        Some(Ok(event)) => {
+                            println!("{}", serde_json::to_string(&event).unwrap())
+                        }
+                        None => break ExitCode::SUCCESS,
+                    }
+                },
+            }
         }
     }
 }
