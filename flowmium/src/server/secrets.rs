@@ -4,26 +4,34 @@ use thiserror::Error;
 
 use super::pool::check_rows_updated;
 
+/// Error on modifying or creating secrets.
 #[derive(Error, Debug)]
 pub enum SecretsCrudError {
+    /// Secret does not exist in the database.
     #[error("secret {0} does not exist")]
     SecretDoesNotExist(String),
+    /// Secret already exists, existing secret has to be deleted to perform the operation.
     #[error("secret {0} already exists error")]
     SecretAlreadyExists(String),
+    /// Error querying the database.
     #[error("database query error: {0}")]
     DatabaseQuery(#[source] sqlx::error::Error),
 }
 
+/// Manage secrets stored in the database. The secrets can be referred in the flow definition, see [`crate::server::model`] and [`crate::server::model::SecretRef`].
 #[derive(Clone)]
 pub struct SecretsCrud {
     pool: Pool<Postgres>,
 }
 
 impl SecretsCrud {
+    /// Create a new secrets CRUD.
     pub fn new(pool: Pool<Postgres>) -> Self {
         Self { pool }
     }
 
+    /// Create a new secret. This secret will be stored in the database.
+    /// This secret will not result in a Kubernetes secret, it will be deployed as a normal environment variable.
     pub async fn create_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
         match sqlx::query(r#"INSERT INTO secrets (secret_key, secret_value) VALUES ($1, $2)"#)
             .bind(&key)
@@ -48,6 +56,7 @@ impl SecretsCrud {
         }
     }
 
+    /// Delete an existing secret.
     pub async fn delete_secret(&self, key: String) -> Result<(), SecretsCrudError> {
         let rows_updated = match sqlx::query(r#"DELETE from secrets WHERE secret_key = $1"#)
             .bind(&key)
@@ -64,6 +73,7 @@ impl SecretsCrud {
         check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
     }
 
+    /// Update an existing secret.
     pub async fn update_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
         let rows_updated =
             match sqlx::query(r#"UPDATE secrets SET secret_value = $2 WHERE secret_key = $1"#)
@@ -82,6 +92,7 @@ impl SecretsCrud {
         check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
     }
 
+    /// Fetch an existing secret.
     pub async fn get_secret(&self, key: &str) -> Result<String, SecretsCrudError> {
         let record: Option<(String,)> =
             match sqlx::query_as(r#"SELECT secret_value FROM secrets WHERE secret_key = $1"#)

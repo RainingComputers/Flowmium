@@ -95,7 +95,7 @@ impl<'a> IntoIterator for &'a FlowList {
     }
 }
 
-/// New type for number of bytes downloaded.
+/// New type for number of bytes downloaded with a pretty implementation for [`std::fmt::Display`].
 #[derive(Getters, Debug)]
 pub struct BytesDownloaded {
     #[getset(get = "pub")]

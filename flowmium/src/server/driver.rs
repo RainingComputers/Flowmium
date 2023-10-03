@@ -21,6 +21,9 @@ use crate::server::{
 use super::args::TaskOpts;
 use super::pool::{init_db_and_get_pool, PostgresConfig};
 
+/// Create a postgres connection pool object, create a table to store secrets and flow statuses and perform migration.
+/// The tables are `flows` and `secrets` respectively. An environment variable named `FLOWMIUM_POSTGRES_URL` with value as an
+/// URL to a postgres database is expected to be set.
 pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
     let database_config: PostgresConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
@@ -33,6 +36,8 @@ pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
     init_db_and_get_pool(database_config).await
 }
 
+/// Constructor executor config from environment variables. Environment variables that are expected to be set
+/// are fields of [`crate::server::executor::ExecutorConfig`] but in all caps prefixed with `FLOWMIUM_`.
 pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
     let executor_config: ExecutorConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
@@ -57,6 +62,8 @@ async fn get_bucket_from_executor_config(
     .await
 }
 
+/// Spawn a tokio task that periodically calls [`crate::server::executor::schedule_and_run_tasks`] every second
+/// and makes progress on pending flows.
 pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &ExecutorConfig) {
     let pool_loop = pool.clone();
     let sched_loop = sched.clone();
@@ -74,8 +81,9 @@ pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config:
     });
 }
 
+/// Run API server. This function does not return unless there is an error.
 #[tracing::instrument(skip(pool, sched, executor_config))]
-pub async fn run_server(
+pub async fn run_api_server(
     pool: &Pool<Postgres>,
     sched: &Scheduler,
     executor_config: &ExecutorConfig,
@@ -120,7 +128,7 @@ async fn server_main(port: u16) -> ExitCode {
 
     spawn_executor(&pool, &sched, &executor_config);
 
-    run_server(&pool, &sched, &executor_config, port).await
+    run_api_server(&pool, &sched, &executor_config, port).await
 }
 
 #[tracing::instrument]
@@ -148,6 +156,7 @@ async fn init_main(src: String, dest: String) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Parse CLI arguments and environment variables and run `flowmium` CLI.
 pub async fn run() -> ExitCode {
     let subscriber = tracing_subscriber::fmt().with_line_number(true).finish();
     match tracing::subscriber::set_global_default(subscriber) {

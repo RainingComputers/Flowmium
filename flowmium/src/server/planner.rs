@@ -3,16 +3,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::{btree_set::BTreeSet, BTreeMap};
 use thiserror::Error;
 
+/// Error constructing an execution plan from a flow definition ([`crate::server::model::Flow`]).
 #[derive(Error, Debug, PartialEq)]
 pub enum PlannerError {
+    /// Cyclic dependencies are present in flow definition.
     #[error("cyclic dependencies found at task {0}")]
     CyclicDependencies(usize),
+    /// A task in the definition is trying to depend on a task that does not exist.
     #[error("dependent task {0} does not exist")]
     DependentTaskDoesNotExist(String),
+    /// Two or more tasks have the same name for their outputs.
+    /// Output names are expected to be unique across tasks in the same flow.
     #[error("output {0} not unique")]
     OutputNotUnique(String),
+    /// A task in the definition is referring to an output from a parent it does not depend on.
     #[error("input ref {1} for task {0} not from a parent task")]
     OutputNotFromParent(String, String),
+    /// A task in the definition is referring to an output which does not exist.
     #[error("input ref {1} for task {0} does not exist")]
     OutputDoesNotExist(String, String),
 }
@@ -22,6 +29,13 @@ pub(crate) struct Node {
     pub children: BTreeSet<usize>,
 }
 
+/// Execution plan of the flow. This is an array of sets container integer elements.
+/// The integer elements refer to index of a task defined in [`crate::server::model::Flow`].
+/// A task is executed in multiple stages, where each stage is a set of tasks.
+/// The set of tasks in the last stage are dependent set of tasks in the last but second stage and so on,
+/// with the first stage having tasks that are independent having no dependencies (leaf tasks).
+/// Tasks belonging to the same stage are not dependent on each other, if a task is dependent on another task,
+/// they will belong to different stages. The number of tasks in each stage need not be equal.
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Plan(pub Vec<BTreeSet<usize>>);
 
