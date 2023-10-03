@@ -19,36 +19,44 @@ use serde::Deserialize;
 
 use thiserror::Error;
 
+/// Errors while trying to run a task.
 #[derive(Error, Debug)]
 pub enum ExecutorError {
+    /// Unable to deploy a job on Kubernetes.
     #[error("unable to spawn task: {0}")]
     UnableToSpawnTask(#[source] kube::error::Error),
+    /// Unable to connect to Kubernetes API.
     #[error("unable connect to kubernetes: {0}")]
     UnableToConnectToKubernetes(#[source] kube::error::Error),
+    /// A pod unexpectedly disappeared or duplicate pods found for a single tasks
+    /// or cannot fetch details for a pod corresponding to a task.
     #[error("unexpected runner state for flow {0} task {1}")]
     UnexpectedRunnerState(i32, i32),
-    #[error("invalid task definition: {0}")]
-    InvalidTaskDefinition(#[source] serde_json::Error),
+    /// Unable to construct a plan because of errors in the flow definition.
     #[error("unable to construct plan: {0}")]
     UnableToConstructPlan(
         #[from]
         #[source]
         PlannerError,
     ),
+    /// Unable to talk to the scheduler, probably an issue with talking to the database.
     #[error("unable to create flow oe mark task error: {0}")]
     UnableToCreateFlowOrMarkTask(
         #[from]
         #[source]
         SchedulerError,
     ),
+    /// Unable to fetch secrets from the database.
     #[error("unable to fetch secret: {0}")]
     UnableToFetchSecret(
         #[from]
         #[source]
         SecretsCrudError,
     ),
+    /// Name of the flow exceeds 32 characters.
     #[error("flow name longer than 32 characters: {0}")]
     FlowNameTooLong(String),
+    /// Kubernetes returned an unknown status for a pod corresponding to a task.
     #[error("Unknown task status for flow {0} task {1}: {2}")]
     UnknownTaskStatus(i32, i32, String),
 }
@@ -69,17 +77,28 @@ fn default_task_label() -> String {
     "flowmium.io/task-id".to_owned()
 }
 
+/// Configuration for the executor.
 #[derive(Debug, PartialEq, Deserialize, Clone)]
 pub struct ExecutorConfig {
+    /// URL for s3 compatible storage for flow artifacts, as accessible from the server.
     pub store_url: String,
+    /// URL for s3 compatible storage for flow artifacts, as accessible from the task running withing Kubernetes.
+    /// Will be the same as `store_url` most times if the server and tasks are running inside kubernetes.
     pub task_store_url: String,
+    /// Name of the bucket to store flow artifacts.
     pub bucket_name: String,
+    /// Access key for s3 compatible storage for flow artifacts.
     pub access_key: String,
+    /// Secret key for s3 compatible storage for flow artifacts.
     pub secret_key: String,
+    /// Image to use for init container. Always set this to same image as the server.
     pub init_container_image: String,
+    /// Kubernetes namespace for the server to run workflows in.
     pub namespace: String,
+    /// Flow ID Kubernetes label for task spawned by flowmium. Default is `flowmium.io/flow-id`.
     #[serde(default = "default_flow_label")]
     pub flow_id_label: String,
+    /// Task ID Kubernetes label for task spawned by flowmium. Default is `flowmium.io/task-id`.
     #[serde(default = "default_task_label")]
     pub task_id_label: String,
 }
@@ -176,21 +195,9 @@ async fn spawn_task(
 
     let jobs: Api<Job> = Api::namespaced(client, &config.namespace);
 
-    let input_json = match serde_json::to_string(&task.inputs) {
-        Ok(string) => string,
-        Err(error) => {
-            tracing::error!(%error, "Unable to serialize input");
-            return Err(ExecutorError::InvalidTaskDefinition(error));
-        }
-    };
-
-    let output_json = match serde_json::to_string(&task.outputs) {
-        Ok(string) => string,
-        Err(error) => {
-            tracing::error!(%error, "Unable to serialize output");
-            return Err(ExecutorError::InvalidTaskDefinition(error));
-        }
-    };
+    // SAFETY: Flow model types don't implement custom serializer methods or have non string keys
+    let input_json = serde_json::to_string(&task.inputs).unwrap();
+    let output_json = serde_json::to_string(&task.outputs).unwrap();
 
     let data = serde_json::from_value(serde_json::json!({
         "apiVersion": "batch/v1",
@@ -340,6 +347,7 @@ async fn get_task_status(
     Ok(status)
 }
 
+/// Create a workflow in pending state that will start running eventually by calling [`crate::server::executor::schedule_and_run_tasks`].
 #[tracing::instrument(skip(sched, flow))]
 pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, ExecutorError> {
     if flow.name.len() > 32 {
@@ -400,6 +408,7 @@ async fn mark_running_tasks(
     }
 }
 
+/// Spawn jobs to make progress pending tasks. Should be called periodically.
 #[tracing::instrument(skip(sched, config, secrets))]
 pub async fn schedule_and_run_tasks(
     sched: &Scheduler,

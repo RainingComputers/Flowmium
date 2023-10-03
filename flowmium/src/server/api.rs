@@ -154,7 +154,7 @@ impl Actor for SchedulerWebsocket {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        // NOTE: This function will only be called once, so unwrap() is okay
+        // SAFETY: This function will only be called once, so unwrap() is okay
         let rx = self.rx.take().unwrap();
 
         let to_json_string = |event| serde_json::to_string(&event).unwrap();

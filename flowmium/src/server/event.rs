@@ -3,17 +3,18 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 use super::record::TaskStatus;
 
+/// An event from the scheduler ([`crate::server::scheduler::Scheduler`]).
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum SchedulerEvent {
+    /// Status of a task has been update.
     TaskStatusUpdateEvent {
         flow_id: i32,
         task_id: i32,
         status: TaskStatus,
     },
-    FlowCreatedEvent {
-        flow_id: i32,
-    },
+    /// A flow was created.
+    FlowCreatedEvent { flow_id: i32 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

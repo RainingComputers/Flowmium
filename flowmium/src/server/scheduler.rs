@@ -10,16 +10,22 @@ use super::{
 
 use thiserror::Error;
 
+/// Database CRUD errors for the schedulers.
 #[derive(Error, Debug)]
 pub enum SchedulerError {
+    /// Record in the database for the flow cannot be parsed, corrupt data or schema mismatch.
     #[error("invalid stored value error for flow: {0}")]
     InvalidStoredValue(i32),
+    /// Error querying the database.
     #[error("database query error: {0}")]
     DatabaseQuery(#[source] sqlx::error::Error),
+    /// Attempted to perform an operation on a flow that does not exists,
+    /// database was likely cleared while some flows were running or a query was made using an invalid id.
     #[error("flow {0} does not exist error")]
     FlowDoesNotExist(i32),
 }
 
+/// Manages and persists statuses of flows in the database and determines the next set of tasks to be spawned.
 #[derive(Debug, Clone)]
 pub struct Scheduler {
     pool: Pool<Postgres>,
@@ -27,12 +33,15 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    /// Create a new scheduler.
     pub fn new(pool: Pool<Postgres>) -> Self {
         let (tx, _rx) = broadcast::channel(1024);
 
         Self { pool, tx }
     }
 
+    /// Subscribe to scheduler events such as creation of a flow, completion of a task etc.
+    /// See [`crate::server::event::SchedulerEvent`] for complete list of events.
     pub fn subscribe(&self) -> broadcast::Receiver<SchedulerEvent> {
         self.tx.subscribe()
     }
@@ -174,6 +183,7 @@ impl Scheduler {
             .await
     }
 
+    /// List first thousand flows that are currently running flows and past terminated flows.
     #[tracing::instrument(skip(self))]
     pub async fn list_flows(&self) -> Result<Vec<FlowListRecord>, SchedulerError> {
         let query = r#"
@@ -199,6 +209,7 @@ impl Scheduler {
         Ok(flows)
     }
 
+    /// List flows that have terminated either successfully or with failure.
     #[tracing::instrument(skip(self))]
     pub async fn list_terminated_flows(
         &self,
@@ -235,6 +246,7 @@ impl Scheduler {
         Ok(flows)
     }
 
+    /// Get more details about a particular flow.
     #[tracing::instrument(skip(self))]
     pub async fn get_flow(&self, id: i32) -> Result<FlowRecord, SchedulerError> {
         let query = r#"
@@ -263,6 +275,7 @@ impl Scheduler {
         }
     }
 
+    /// Get flows that are currently running or yet to run (pending).
     #[tracing::instrument(skip(self))]
     pub async fn get_running_or_pending_flow_ids(
         &self,
