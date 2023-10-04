@@ -335,7 +335,7 @@ impl Scheduler {
                         ELSE current_stage 
                     END
             WHERE (finished_tasks @> array(SELECT json_array_elements_text((plan -> current_stage)::json) :: integer) OR status = 'pending')
-            AND current_stage < json_array_length(plan) - 1
+            AND current_stage <= json_array_length(plan) - 1
             AND id = $1
             AND status IN ('running', 'pending')
             RETURNING  *
