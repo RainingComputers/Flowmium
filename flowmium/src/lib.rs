@@ -63,6 +63,21 @@
 //!     }
 //! }
 //! ```
+//!
+//! To run the example, you will have to run something like below
+//!
+//! ```shell
+//! export FLOWMIUM_POSTGRES_URL='postgres://flowmium:flowmium@localhost/flowmium'
+//! export FLOWMIUM_STORE_URL='http://localhost:9000'
+//! export FLOWMIUM_TASK_STORE_URL='http://172.16.238.4:9000'
+//! export FLOWMIUM_BUCKET_NAME='flowmium-test'
+//! export FLOWMIUM_ACCESS_KEY='minio'
+//! export FLOWMIUM_SECRET_KEY='password'
+//! export FLOWMIUM_INIT_CONTAINER_IMAGE='docker.io/shnoo28/flowmium:latest'
+//! export FLOWMIUM_NAMESPACE=default
+//! export KUBECONFIG=./kubeconfig.yaml
+//! cargo run
+//! ```
 
 mod client;
 mod retry;
