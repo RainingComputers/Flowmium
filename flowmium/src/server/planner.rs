@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{btree_set::BTreeSet, BTreeMap};
 use thiserror::Error;
 
-/// Error constructing an execution plan from a flow definition ([`crate::server::model::Flow`]).
+/// Error constructing an execution plan from a flow definition ([`crate::model::Flow`]).
 #[derive(Error, Debug, PartialEq)]
 pub enum PlannerError {
     /// Cyclic dependencies are present in flow definition.
@@ -29,8 +29,8 @@ pub(crate) struct Node {
     pub children: BTreeSet<usize>,
 }
 
-/// Execution plan of the flow. This is an array of sets container integer elements.
-/// The integer elements refer to index of a task defined in [`crate::server::model::Flow`].
+/// Execution plan of the flow. This is an array of sets containing integer elements.
+/// The integer elements refer to index of a task defined in [`crate::model::Flow`].
 /// A task is executed in multiple stages, where each stage is a set of tasks.
 /// The set of tasks in the last stage are dependent set of tasks in the last but second stage and so on,
 /// with the first stage having tasks that are independent having no dependencies (leaf tasks).
@@ -241,7 +241,7 @@ pub(crate) fn construct_plan(tasks: &[Task]) -> Result<Plan, PlannerError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::model::{Input, Output};
+    use crate::model::{Input, Output};
 
     use super::*;
 

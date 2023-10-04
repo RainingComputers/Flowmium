@@ -10,7 +10,7 @@ use super::{
 
 use thiserror::Error;
 
-/// Database CRUD errors for the schedulers.
+/// Database CRUD errors for the scheduler.
 #[derive(Error, Debug)]
 pub enum SchedulerError {
     /// Record in the database for the flow cannot be parsed, corrupt data or schema mismatch.
@@ -41,7 +41,7 @@ impl Scheduler {
     }
 
     /// Subscribe to scheduler events such as creation of a flow, completion of a task etc.
-    /// See [`crate::server::event::SchedulerEvent`] for complete list of events.
+    /// See [`crate::event::SchedulerEvent`] for complete list of events.
     pub fn subscribe(&self) -> broadcast::Receiver<SchedulerEvent> {
         self.tx.subscribe()
     }
@@ -183,7 +183,7 @@ impl Scheduler {
             .await
     }
 
-    /// List first thousand flows that are currently running flows and past terminated flows.
+    /// List first thousand flows that are currently running or have terminated.
     #[tracing::instrument(skip(self))]
     pub async fn list_flows(&self) -> Result<Vec<FlowListRecord>, SchedulerError> {
         let query = r#"
@@ -275,7 +275,7 @@ impl Scheduler {
         }
     }
 
-    /// Get flows that are currently running or yet to run (pending).
+    /// Get IDs flows and IDs of tasks that are currently running or yet to run (pending).
     #[tracing::instrument(skip(self))]
     pub async fn get_running_or_pending_flow_ids(
         &self,

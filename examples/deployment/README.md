@@ -22,7 +22,7 @@ You can deploy flowmium on your local machine for testing and for production
     KUBECONFIG=./kubeconfig.yaml kubectl apply -f kubernetes.yaml
     ```
 
--   Watch kubernetes pods
+-   Watch Kubernetes pods
 
     ```
     KUBECONFIG=./kubeconfig.yaml watch kubectl get pods
@@ -54,4 +54,4 @@ You can use [`kubernetes.yaml`](kubernetes.yaml) in this example folder for depl
 | FLOWMIUM_SECRET_KEY           | Secret key for s3                                                                                                                                                            | `password`                                        |
 | FLOWMIUM_INIT_CONTAINER_IMAGE | Image to use for the init container                                                                                                                                          | `docker.io/shnoo28/flowmium:latest`               |
 | FLOWMIUM_NAMESPACE            | Namespace to spawn or deploy jobs in                                                                                                                                         | `default`                                         |
-| KUBECONFIG                    | Path to kubeconfig, not required if a kubernetes service account is attached                                                                                                 | `./kubeconfig.yaml`                               |
+| KUBECONFIG                    | Path to kubeconfig, not required if a Kubernetes service account is attached                                                                                                 | `./kubeconfig.yaml`                               |

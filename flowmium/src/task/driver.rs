@@ -4,7 +4,7 @@ use serde_json;
 
 use std::process::{Command, ExitCode, Stdio};
 
-use crate::server::model::{Input, Output};
+use crate::model::{Input, Output};
 
 use super::bucket::{download_input, get_bucket, upload_output};
 use super::errors::ArtefactError;

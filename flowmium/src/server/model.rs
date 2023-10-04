@@ -16,7 +16,7 @@ pub struct SecretRef {
     /// Name for the environment variable.
     pub name: String,
     /// Name of the secret key to extract the value from. The secret can be create via
-    /// `flowctl secret create <key> <value>` or [`crate::client::requests::create_secret`] or [`crate::server::secrets::SecretsCrud`].
+    /// `flowctl secret create <key> <value>` or [`crate::client::requests::create_secret`] or [`crate::secrets::SecretsCrud`].
     pub from_secret: String,
 }
 
@@ -68,12 +68,12 @@ pub struct Task {
     pub depends: Vec<String>,
     /// Command to be executed inside the container image to run that task.
     pub cmd: Vec<String>,
-    /// List of environment variable for the task.
+    /// List of environment variables for the task.
     pub env: Vec<EnvVar>,
     /// List of input files that this task will consume. Each input will refer to
     /// an output file from a dependent task.
     pub inputs: Option<Vec<Input>>,
-    /// List of output files from this task.
+    /// List of output files emitted by this task.
     pub outputs: Option<Vec<Output>>,
 }
 

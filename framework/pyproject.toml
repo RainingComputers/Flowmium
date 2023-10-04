@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "flowmium"
 version = "0.0.2"
-description = "Workflow orchestrator for kubernetes."
+description = "Workflow orchestrator for Kubernetes."
 license = "MIT"
 authors = ["RainingComputers <vishnu.vish.shankar@gmail.com>"]
 readme = "README.md"

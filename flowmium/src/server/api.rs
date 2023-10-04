@@ -115,9 +115,7 @@ async fn create_secret(
     value: web::Json<String>,
     secrets: web::Data<SecretsCrud>,
 ) -> Result<&'static str, SecretsCrudError> {
-    secrets
-        .create_secret(key.into_inner(), value.to_string())
-        .await?;
+    secrets.create_secret(&key, &value).await?;
 
     Ok("")
 }
@@ -127,7 +125,7 @@ async fn delete_secret(
     key: web::Path<String>,
     secrets: web::Data<SecretsCrud>,
 ) -> Result<&'static str, SecretsCrudError> {
-    secrets.delete_secret(key.into_inner()).await?;
+    secrets.delete_secret(&key).await?;
 
     Ok("")
 }
@@ -138,9 +136,7 @@ async fn update_secret(
     value: web::Json<String>,
     secrets: web::Data<SecretsCrud>,
 ) -> Result<&'static str, SecretsCrudError> {
-    secrets
-        .update_secret(key.into_inner(), value.to_string())
-        .await?;
+    secrets.update_secret(&key, &value).await?;
 
     Ok("")
 }
