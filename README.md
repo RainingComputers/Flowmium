@@ -2,7 +2,7 @@
 
 # Flowmium
 
-Flowmium is a workflow orchestrator that uses Kubernetes. You can define and run a [YAML workflow](/examples/yaml_flow_definition/my_flow.yaml) of containers or you can run a python workflow where each function runs as a kubernetes pod.
+Flowmium is a workflow orchestrator that uses Kubernetes. You can define and run a [YAML workflow](/examples/yaml_flow_definition/my_flow.yaml) of containers or you can run a python workflow where each function runs as a Kubernetes pod.
 
 A python workflow would look like this
 
@@ -50,6 +50,8 @@ if __name__ == "__main__":
 -   [Example YAML definition workflow](examples/yaml_flow_definition/)
 -   [Python framework documentation](http://flowmium.readthedocs.io/)
 -   [API documentation](flowmium/apidoc.http)
+-   [Rust client docs](https://docs.rs/flowmium/latest/flowmium/requests/index.html)
+-   [Integrating into an existing Rust project](https://docs.rs/flowmium/latest/flowmium/)
 
 ## `flowctl` CLI
 

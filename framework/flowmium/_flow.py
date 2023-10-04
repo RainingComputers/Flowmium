@@ -179,7 +179,7 @@ class Flow:
         Args:
             image: All python flows (packages and modules that call :code:`flow.run()` when
                 executed) are packaged into a docker image and uploaded to registry that is
-                accessible to the kubernetes cluster that the executor is running in.
+                accessible to the Kubernetes cluster that the executor is running in.
                 This argument is the name of the uploaded image,
                 example :code:`localhost:5180/py-flow-test:latest`.
 

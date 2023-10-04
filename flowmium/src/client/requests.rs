@@ -124,7 +124,7 @@ pub async fn list_workflows(url: &str) -> Result<FlowList, ClientError> {
     })
 }
 
-/// Get more details status of a workflow, like the plan, number of running tasks etc.
+/// Get more detailed status of a workflow, like the plan, number of running tasks etc.
 pub async fn get_status(url: &str, id: &str) -> Result<FlowRecord, ClientError> {
     let abs_url = get_abs_url(url, &format!("/api/v1/job/{}", id))?;
 

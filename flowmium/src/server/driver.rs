@@ -1,3 +1,14 @@
+use s3::Bucket;
+use sqlx::{Pool, Postgres};
+use std::{process::ExitCode, time::Duration};
+use tokio::task::JoinHandle;
+
+use crate::server::{
+    api::start_server,
+    args,
+    executor::{schedule_and_run_tasks, ExecutorConfig},
+    scheduler::Scheduler,
+};
 use crate::{
     retry::with_exp_backoff_retry,
     server::secrets::SecretsCrud,
@@ -6,16 +17,6 @@ use crate::{
         driver::{run_task, SidecarConfig},
         errors::ArtefactError,
     },
-};
-use s3::Bucket;
-use sqlx::{Pool, Postgres};
-use std::{process::ExitCode, time::Duration};
-
-use crate::server::{
-    api::start_server,
-    args,
-    executor::{schedule_and_run_tasks, ExecutorConfig},
-    scheduler::Scheduler,
 };
 
 use super::args::TaskOpts;
@@ -37,7 +38,7 @@ pub async fn get_default_postgres_pool() -> Option<Pool<Postgres>> {
 }
 
 /// Constructor executor config from environment variables. Environment variables that are expected to be set
-/// are fields of [`crate::server::executor::ExecutorConfig`] but in all caps prefixed with `FLOWMIUM_`.
+/// are fields of [`crate::executor::ExecutorConfig`] but in all caps prefixed with `FLOWMIUM_`.
 pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
     let executor_config: ExecutorConfig = match envy::prefixed("FLOWMIUM_").from_env() {
         Ok(config) => config,
@@ -62,9 +63,13 @@ async fn get_bucket_from_executor_config(
     .await
 }
 
-/// Spawn a tokio task that periodically calls [`crate::server::executor::schedule_and_run_tasks`] every second
+/// Spawn a tokio task that periodically calls [`crate::executor::schedule_and_run_tasks`] every second
 /// and makes progress on pending flows.
-pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config: &ExecutorConfig) {
+pub fn spawn_executor(
+    pool: &Pool<Postgres>,
+    sched: &Scheduler,
+    executor_config: &ExecutorConfig,
+) -> JoinHandle<()> {
     let pool_loop = pool.clone();
     let sched_loop = sched.clone();
     let executor_config_loop = executor_config.clone();
@@ -78,7 +83,7 @@ pub fn spawn_executor(pool: &Pool<Postgres>, sched: &Scheduler, executor_config:
             tokio::time::sleep(Duration::from_millis(1000)).await;
             schedule_and_run_tasks(&sched_loop, &executor_config_loop, &secrets).await;
         }
-    });
+    })
 }
 
 /// Run API server. This function does not return unless there is an error.

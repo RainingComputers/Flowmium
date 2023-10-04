@@ -18,7 +18,7 @@ pub enum SecretsCrudError {
     DatabaseQuery(#[source] sqlx::error::Error),
 }
 
-/// Manage secrets stored in the database. The secrets can be referred in the flow definition, see [`crate::server::model`] and [`crate::server::model::SecretRef`].
+/// Manage secrets stored in the database. The secrets can be referred in the flow definition, see [`crate::model`] and [`crate::model::SecretRef`].
 #[derive(Clone)]
 pub struct SecretsCrud {
     pool: Pool<Postgres>,
@@ -32,9 +32,9 @@ impl SecretsCrud {
 
     /// Create a new secret. This secret will be stored in the database.
     /// This secret will not result in a Kubernetes secret, it will be deployed as a normal environment variable.
-    pub async fn create_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
+    pub async fn create_secret(&self, key: &str, value: &str) -> Result<(), SecretsCrudError> {
         match sqlx::query(r#"INSERT INTO secrets (secret_key, secret_value) VALUES ($1, $2)"#)
-            .bind(&key)
+            .bind(key)
             .bind(value)
             .execute(&self.pool)
             .await
@@ -46,7 +46,7 @@ impl SecretsCrud {
 
                     if let Some(code) = database_error_optional {
                         if code.into_owned() == "23505" {
-                            return Err(SecretsCrudError::SecretAlreadyExists(key));
+                            return Err(SecretsCrudError::SecretAlreadyExists(key.to_string()));
                         }
                     }
                 }
@@ -57,9 +57,9 @@ impl SecretsCrud {
     }
 
     /// Delete an existing secret.
-    pub async fn delete_secret(&self, key: String) -> Result<(), SecretsCrudError> {
+    pub async fn delete_secret(&self, key: &str) -> Result<(), SecretsCrudError> {
         let rows_updated = match sqlx::query(r#"DELETE from secrets WHERE secret_key = $1"#)
-            .bind(&key)
+            .bind(key)
             .execute(&self.pool)
             .await
         {
@@ -70,14 +70,17 @@ impl SecretsCrud {
             }
         };
 
-        check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
+        check_rows_updated(
+            rows_updated,
+            SecretsCrudError::SecretDoesNotExist(key.to_string()),
+        )
     }
 
     /// Update an existing secret.
-    pub async fn update_secret(&self, key: String, value: String) -> Result<(), SecretsCrudError> {
+    pub async fn update_secret(&self, key: &str, value: &str) -> Result<(), SecretsCrudError> {
         let rows_updated =
             match sqlx::query(r#"UPDATE secrets SET secret_value = $2 WHERE secret_key = $1"#)
-                .bind(&key)
+                .bind(key)
                 .bind(value)
                 .execute(&self.pool)
                 .await
@@ -89,7 +92,10 @@ impl SecretsCrud {
                 }
             };
 
-        check_rows_updated(rows_updated, SecretsCrudError::SecretDoesNotExist(key))
+        check_rows_updated(
+            rows_updated,
+            SecretsCrudError::SecretDoesNotExist(key.to_string()),
+        )
     }
 
     /// Fetch an existing secret.
@@ -108,7 +114,7 @@ impl SecretsCrud {
             };
 
         let Some(record) = record else {
-            return Err(SecretsCrudError::SecretDoesNotExist(key.to_owned()));
+            return Err(SecretsCrudError::SecretDoesNotExist(key.to_string()));
         };
 
         Ok(record.0)
@@ -135,55 +141,35 @@ mod tests {
             })
         }
 
-        test_crud
-            .create_secret("foo".to_string(), "bar".to_string())
-            .await
-            .unwrap();
+        test_crud.create_secret("foo", "bar").await.unwrap();
 
-        let r1 = test_crud
-            .create_secret("foo".to_string(), "bar".to_string())
-            .await;
+        let r1 = test_crud.create_secret("foo", "bar").await;
 
         match r1.unwrap_err() {
             SecretsCrudError::SecretAlreadyExists(key) => assert_eq!(key, "foo"),
             _ => panic!(),
         };
 
-        test_crud
-            .create_secret("another".to_string(), "yeah".to_string())
-            .await
-            .unwrap();
+        test_crud.create_secret("another", "yeah").await.unwrap();
 
-        assert_eq!(test_crud.get_secret("foo").await.unwrap(), "bar".to_owned());
+        assert_eq!(test_crud.get_secret("foo").await.unwrap(), "bar");
 
-        assert_eq!(
-            test_crud.get_secret("another").await.unwrap(),
-            "yeah".to_owned()
-        );
+        assert_eq!(test_crud.get_secret("another").await.unwrap(), "yeah");
 
-        test_crud
-            .update_secret("another".to_owned(), "ye".to_owned())
-            .await
-            .unwrap();
+        test_crud.update_secret("another", "ye").await.unwrap();
 
-        assert_eq!(
-            test_crud.get_secret("another").await.unwrap(),
-            "ye".to_owned()
-        );
+        assert_eq!(test_crud.get_secret("another").await.unwrap(), "ye");
 
-        test_crud.delete_secret("another".to_owned()).await.unwrap();
+        test_crud.delete_secret("another").await.unwrap();
 
         assert_does_not_exist_error(
-            test_crud
-                .delete_secret("another".to_owned())
-                .await
-                .unwrap_err(),
+            test_crud.delete_secret("another").await.unwrap_err(),
             "another",
         );
 
         assert_does_not_exist_error(
             test_crud
-                .update_secret("another".to_owned(), "doesNotMatter".to_owned())
+                .update_secret("another", "doesNotMatter")
                 .await
                 .unwrap_err(),
             "another",

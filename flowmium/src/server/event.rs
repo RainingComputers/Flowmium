@@ -3,7 +3,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 use super::record::TaskStatus;
 
-/// An event from the scheduler ([`crate::server::scheduler::Scheduler`]).
+/// An event from the scheduler ([`crate::scheduler::Scheduler`]).
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum SchedulerEvent {

@@ -43,12 +43,12 @@ impl fmt::Display for TaskStatus {
 pub struct FlowRecord {
     /// Unique identifier for the flow.
     pub id: i32,
-    /// Name of the flow as specified in [`crate::server::model::Flow`].
+    /// Name of the flow as specified in [`crate::model::Flow`].
     pub flow_name: String,
     /// Status of the flow.
     pub status: FlowStatus,
-    /// Execution plan of the flow. This is a nested 2D JSON array container integer elements.
-    /// The integer elements refer to index of a task defined in [`crate::server::model::Flow`].
+    /// Execution plan of the flow. This is a nested 2D JSON array containing integer elements.
+    /// The integer elements refer to index of a task defined in [`crate::model::Flow`].
     /// A task is executed in multiple stages, where each stage is a set of tasks.
     /// The set of tasks in the last stage are dependent set of tasks in the last but second stage and so on,
     /// with the first stage having tasks that are independent having no dependencies (leaf tasks).
@@ -64,7 +64,7 @@ pub struct FlowRecord {
     pub finished_tasks: Vec<i32>,
     /// Indices of tasks that have failed.
     pub failed_tasks: Vec<i32>,
-    /// List of tasks that belong to this flow, as define in [`crate::server::model::Flow`].
+    /// List of tasks that belong to this flow, as define in [`crate::model::Flow`].
     pub task_definitions: serde_json::Value,
 }
 
@@ -73,7 +73,7 @@ pub struct FlowRecord {
 pub struct FlowListRecord {
     /// Unique identifier for the flow.
     pub id: i32,
-    /// Name of the flow as specified in [`crate::server::model::Flow`].
+    /// Name of the flow as specified in [`crate::model::Flow`].
     pub flow_name: String,
     /// Status of the flow.
     pub status: FlowStatus,

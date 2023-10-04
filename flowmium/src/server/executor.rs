@@ -347,7 +347,7 @@ async fn get_task_status(
     Ok(status)
 }
 
-/// Create a workflow in pending state that will start running eventually by calling [`crate::server::executor::schedule_and_run_tasks`].
+/// Create a workflow in pending state that will start running eventually by calling [`crate::executor::schedule_and_run_tasks`].
 #[tracing::instrument(skip(sched, flow))]
 pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, ExecutorError> {
     if flow.name.len() > 32 {
@@ -656,10 +656,7 @@ mod tests {
         let secrets = SecretsCrud::new(pool.clone());
 
         secrets
-            .create_secret(
-                "test-greetings-secret".to_string(),
-                "Greetings foobar".to_string(),
-            )
+            .create_secret("test-greetings-secret", "Greetings foobar")
             .await
             .unwrap();
 
