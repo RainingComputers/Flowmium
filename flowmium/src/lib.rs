@@ -21,6 +21,9 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
+//!     let subscriber = tracing_subscriber::FmtSubscriber::new();
+//!     tracing::subscriber::set_global_default(subscriber).unwrap();
+//!
 //!     let pool = driver::get_default_postgres_pool().await.unwrap();
 //!
 //!     let executor_config = driver::get_default_executor_config().await.unwrap();
