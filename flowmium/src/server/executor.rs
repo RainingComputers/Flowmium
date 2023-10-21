@@ -363,7 +363,7 @@ pub async fn instantiate_flow(flow: Flow, sched: &Scheduler) -> Result<i32, Exec
 }
 
 #[tracing::instrument(skip(sched, config, secrets))]
-async fn sched_pending_tasks(
+async fn sched_tasks(
     sched: &Scheduler,
     flow_id: i32,
     config: &ExecutorConfig,
@@ -390,7 +390,7 @@ async fn sched_pending_tasks(
 }
 
 #[tracing::instrument(skip(sched, config))]
-async fn mark_running_tasks(
+async fn mark_tasks(
     sched: &Scheduler,
     flow_id: i32,
     task_id: i32,
@@ -415,23 +415,22 @@ pub async fn schedule_and_run_tasks(
     config: &ExecutorConfig,
     secrets: &SecretsCrud,
 ) {
-    if let Ok(tasks_to_schedule) = sched.get_running_or_pending_flow_ids().await {
-        for (flow_id, running_tasks) in tasks_to_schedule {
-            match sched_pending_tasks(sched, flow_id, config, secrets).await {
+    if let Ok(flows) = sched.get_running_or_pending_flow_ids().await {
+        for (flow_id, running_tasks) in flows {
+            match sched_tasks(sched, flow_id, config, secrets).await {
                 Ok(true) => continue,
                 Ok(false) => (),
                 Err(_) => break,
             }
 
             for task_id in running_tasks {
-                if (mark_running_tasks(sched, flow_id, task_id, config).await).is_err() {
+                if (mark_tasks(sched, flow_id, task_id, config).await).is_err() {
                     break;
                 };
             }
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
 
