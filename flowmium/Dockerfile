@@ -1,3 +1,3 @@
 FROM scratch
-ARG BUILDARCH
-COPY ./build/${BUILDARCH}/flowmium .
+ARG TARGETARCH
+COPY ./build/${TARGETARCH}/flowmium .
