@@ -34,7 +34,7 @@ jobs:
         run: cargo fmt --check
         working-directory: flowmium
       - name: Start test services
-        run: docker-compose -f test-services.yaml up -d
+        run: docker compose -f test-services.yaml up -d
         working-directory: flowmium
       - name: Wait for test services to be healthy
         timeout-minutes: 5
