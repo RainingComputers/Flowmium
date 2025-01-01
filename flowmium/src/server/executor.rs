@@ -475,7 +475,7 @@ mod tests {
             .unwrap();
     }
 
-    async fn delete_all_objects(config: &ExecutorConfig) -> Bucket {
+    async fn delete_all_objects(config: &ExecutorConfig) -> Box<Bucket> {
         let bucket = get_bucket(
             &config.access_key,
             &config.secret_key,
@@ -659,8 +659,8 @@ mod tests {
             .await
             .unwrap();
 
-        delete_all_pods().await;
-        delete_all_jobs().await;
+        // delete_all_pods().await;
+        // delete_all_jobs().await;
         let bucket = delete_all_objects(&config).await;
 
         let flow_id = instantiate_flow(test_flow(), &sched).await.unwrap();

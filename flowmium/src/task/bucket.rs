@@ -1,15 +1,12 @@
-use s3::{creds::Credentials, request_trait::ResponseData, Bucket, BucketConfiguration, Region};
+use s3::{creds::Credentials, request::ResponseData, Bucket, BucketConfiguration, Region};
 
 use super::errors::ArtefactError;
 
 pub async fn bucket_exists(bucket: &Bucket) -> Result<bool, ArtefactError> {
-    match bucket
-        .list_page("/".to_string(), None, None, None, None)
-        .await
-    {
-        Ok(_) => Ok(true),
+    match bucket.exists().await {
+        Ok(exists) => Ok(exists),
         Err(error) => match error {
-            s3::error::S3Error::Http(404, _) => Ok(false),
+            s3::error::S3Error::HttpFailWithBody(404, _) => Ok(false),
             _ => {
                 tracing::error!(%error, "Unable to check if bucket exists");
                 Err(ArtefactError::UnableToCheckExistence(error))
@@ -18,7 +15,9 @@ pub async fn bucket_exists(bucket: &Bucket) -> Result<bool, ArtefactError> {
     }
 }
 
-pub async fn create_if_does_not_exist(bucket: Bucket) -> Result<Bucket, ArtefactError> {
+pub async fn create_if_does_not_exist(bucket: Box<Bucket>) -> Result<Box<Bucket>, ArtefactError> {
+    let credentials = bucket.credentials().await.unwrap();
+
     match bucket_exists(&bucket).await? {
         true => {
             tracing::info!("Using existing bucket");
@@ -26,8 +25,8 @@ pub async fn create_if_does_not_exist(bucket: Bucket) -> Result<Bucket, Artefact
         }
         false => match Bucket::create_with_path_style(
             &bucket.name,
-            bucket.region,
-            bucket.credentials,
+            bucket.region.clone(),
+            credentials,
             BucketConfiguration::public(),
         )
         .await
@@ -35,7 +34,7 @@ pub async fn create_if_does_not_exist(bucket: Bucket) -> Result<Bucket, Artefact
             Ok(response) => match response.success() {
                 true => {
                     tracing::info!("Created a new bucket");
-                    Ok(response.bucket)
+                    Ok(bucket)
                 }
                 false => {
                     tracing::error!(
@@ -61,7 +60,7 @@ pub async fn get_bucket(
     secret_key: &str,
     bucket_name: &str,
     store_url: String,
-) -> Result<Bucket, ArtefactError> {
+) -> Result<Box<Bucket>, ArtefactError> {
     let bucket_creds = match Credentials::new(Some(access_key), Some(secret_key), None, None, None)
     {
         Ok(creds) => creds,
@@ -108,7 +107,7 @@ pub async fn get_artefact(
     let response = match bucket.get_object(&store_path).await {
         Ok(response) => response,
         Err(error) => match error {
-            s3::error::S3Error::Http(404, _) => {
+            s3::error::S3Error::HttpFailWithBody(404, _) => {
                 tracing::error!("Got 404 response while downloading artefact");
                 return Err(ArtefactError::ArtefactDoesNotExist(store_path));
             }

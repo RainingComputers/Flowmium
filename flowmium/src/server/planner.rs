@@ -189,7 +189,7 @@ fn valid_input_outputs(tasks: &[Task], nodes: &[Node]) -> Result<(), PlannerErro
     let mut output_task_name_map: BTreeMap<&String, usize> = BTreeMap::new();
 
     for (task_id, task) in tasks.iter().enumerate() {
-        for outputs in &task.outputs {
+        if let Some(outputs) = &task.outputs {
             for output in outputs {
                 if output_task_name_map.insert(&output.name, task_id).is_some() {
                     return Err(PlannerError::OutputNotUnique(output.name.clone()));
@@ -199,7 +199,7 @@ fn valid_input_outputs(tasks: &[Task], nodes: &[Node]) -> Result<(), PlannerErro
     }
 
     for (task_id, task) in tasks.iter().enumerate() {
-        for inputs in &task.inputs {
+        if let Some(inputs) = &task.inputs {
             for input in inputs {
                 let Some(from_task_id) = output_task_name_map.get(&input.from) else {
                     return Err(PlannerError::OutputDoesNotExist(

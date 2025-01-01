@@ -53,7 +53,7 @@ pub async fn get_default_executor_config() -> Option<ExecutorConfig> {
 
 async fn get_bucket_from_executor_config(
     executor_config: &ExecutorConfig,
-) -> Result<Bucket, ArtefactError> {
+) -> Result<Box<Bucket>, ArtefactError> {
     get_bucket(
         &executor_config.access_key,
         &executor_config.secret_key,

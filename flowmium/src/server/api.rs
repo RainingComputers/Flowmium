@@ -196,7 +196,7 @@ pub async fn start_server(
     port: u16,
     pool: Pool<Postgres>,
     sched: &Scheduler,
-    bucket: Bucket,
+    bucket: Box<Bucket>,
 ) -> std::io::Result<()> {
     let sched = sched.clone();
     let secrets = SecretsCrud::new(pool.clone());

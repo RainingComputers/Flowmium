@@ -6,6 +6,7 @@ update-examples:
 
 	mv examples/python_package_workflow/my_flow/example_flow.py  examples/python_package_workflow/my_flow/__main__.py
 	mv  examples/python_package_workflow/example_flow.py examples/python_script_workflow/my_flow.py
-	head flowmium/apidoc.http -n 55 | tail -n +4 | yq -y > examples/yaml_flow_definition/my_flow.yml
+	head flowmium/apidoc.http -n 55 | tail -n +4 | yq -y > examples/yaml_flow_definition/my_flow.yaml
 
-	cp flowmium/test-registries.yaml examples/python_package_workflow/
+	rm examples/deployment/test-registries.yaml
+	cp flowmium/test-registries.yaml examples/deployment/

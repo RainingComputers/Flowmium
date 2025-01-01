@@ -240,7 +240,7 @@ pub async fn subscribe(
         return Err(ClientError::UrlSchemeConversion);
     };
 
-    let (ws_stream, _) = tokio_tungstenite::connect_async(abs_url).await?;
+    let (ws_stream, _) = tokio_tungstenite::connect_async(abs_url.to_string()).await?;
 
     fn text_only(msg: &Result<Message, tungstenite::Error>) -> bool {
         match msg {
