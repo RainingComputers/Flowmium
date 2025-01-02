@@ -88,7 +88,7 @@ impl ResponseError for ArtefactError {
 #[get("/artefact/{flow_id}/{output_name}")]
 async fn download_artefact(
     path: web::Path<(usize, String)>,
-    bucket: web::Data<Bucket>,
+    bucket: web::Data<Box<Bucket>>,
 ) -> Result<HttpResponse, ArtefactError> {
     let (flow_id, output_name) = path.into_inner();
     let store_path = get_store_path(flow_id, &output_name);
